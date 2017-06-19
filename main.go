@@ -4,11 +4,12 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
+
+	"github.com/tidwall/gjson"
 )
 
 const (
@@ -157,16 +158,12 @@ func parseVertex(data []byte, vertexType string, offset int, stride int) [][]flo
 
 		if vertexType == "_vertex_format_attribute_short4" {
 			out := make([]int16, 4)
-			//fmt.Printf("Parsing bytes: [% x]\n", data[i:i+8])
 			binary.Read(bytes.NewBuffer(data[i:i+8]), binary.LittleEndian, out)
-			//fmt.Printf("binary.Read shorts: %+v\n", out)
 			outFloats := []float64{float64(out[0]), float64(out[1]), float64(out[2]), float64(out[3])}
 			result = append(result, outFloats)
 		} else if vertexType == "_vertex_format_attribute_float4" {
 			out := make([]float32, 4)
-			//fmt.Printf("Parsing bytes: [% x]\n", data[i:i+16])
 			binary.Read(bytes.NewBuffer(data[i:i+16]), binary.LittleEndian, out)
-			//fmt.Printf("binary.Read floats: %+v\n", out)
 			outFloats := []float64{float64(out[0]), float64(out[1]), float64(out[2]), float64(out[3])}
 			result = append(result, outFloats)
 		} else {
@@ -177,43 +174,42 @@ func parseVertex(data []byte, vertexType string, offset int, stride int) [][]flo
 }
 
 func (stl *STLWriter) writeModel(geom *DestinyGeometry) error {
-	var result map[string]interface{}
 
-	err := json.Unmarshal(geom.MeshesBytes, &result)
-	if err != nil {
-		fmt.Println("Error unmarshaling mesh JSON: ", err.Error())
+	result := gjson.Parse(string(geom.MeshesBytes))
+
+	meshes := result.Get("render_model.render_meshes")
+	if meshes.Exists() == false {
+		err := errors.New("Error unmarshaling mesh JSON: render meshes not found")
 		return err
 	}
 
-	meshes := result["render_model"].(map[string]interface{})["render_meshes"].([]interface{})
-
 	fmt.Printf("Successfully parsed meshes JSON\n")
 
-	for meshIndex, meshInterface := range meshes {
-		mesh := meshInterface.(map[string]interface{})
+	for meshIndex, meshInterface := range meshes.Array() {
+		mesh := meshInterface.Map()
 		positions := [][]float64{}
 		normals := [][]float64{}
-		defVB := mesh["stage_part_vertex_stream_layout_definitions"].([]interface{})[0].(map[string]interface{})["formats"].([]interface{})
+		defVB := mesh["stage_part_vertex_stream_layout_definitions"].Array()[0].Map()["formats"].Array()
 
-		for index, vbInterface := range mesh["vertex_buffers"].([]interface{}) {
-			currentDefVB := defVB[index].(map[string]interface{})
-			vertexBuffers := vbInterface.(map[string]interface{})
-			stride := currentDefVB["stride"].(float64)
-			if stride != vertexBuffers["stride_byte_size"].(float64) {
+		for index, vbInterface := range mesh["vertex_buffers"].Array() {
+			currentDefVB := defVB[index].Map()
+			vertexBuffers := vbInterface.Map()
+			stride := currentDefVB["stride"].Float()
+			if stride != vertexBuffers["stride_byte_size"].Float() {
 				return errors.New("Mismatched stride sizes found")
 			}
 
-			data := geom.getFileByName(vertexBuffers["file_name"].(string)).Data
+			data := geom.getFileByName(vertexBuffers["file_name"].String()).Data
 			if data == nil {
-				return errors.New("Missing geometry file by name: " + vertexBuffers["file_name"].(string))
+				return errors.New("Missing geometry file by name: " + vertexBuffers["file_name"].String())
 			}
 
-			for _, elementInterface := range currentDefVB["elements"].([]interface{}) {
-				element := elementInterface.(map[string]interface{})
-				elementType := element["type"].(string)
-				elementOffset := element["offset"].(float64)
+			for _, elementInterface := range currentDefVB["elements"].Array() {
+				element := elementInterface.Map()
+				elementType := element["type"].String()
+				elementOffset := element["offset"].Float()
 
-				switch element["semantic"].(string) {
+				switch element["semantic"].String() {
 				case "_tfx_vb_semantic_position":
 					positions = parseVertex(data, elementType, int(elementOffset), int(stride))
 				case "_tfx_vb_semantic_normal":
@@ -222,8 +218,6 @@ func (stl *STLWriter) writeModel(geom *DestinyGeometry) error {
 			}
 		}
 
-		//fmt.Printf("Found positions: %v\n", positions)
-		//fmt.Printf("Found normals: %v\n", normals)
 		if len(positions) == 0 || len(normals) == 0 || len(positions) != len(normals) {
 			return errors.New("Positions slice is not the same size as the normals slice")
 		}
@@ -231,9 +225,8 @@ func (stl *STLWriter) writeModel(geom *DestinyGeometry) error {
 		// Parse the index buffer
 		indexBuffer := make([]int16, 0)
 
-		indexBufferBytes := geom.getFileByName(mesh["index_buffer"].(map[string]interface{})["file_name"].(string)).Data
+		indexBufferBytes := geom.getFileByName(mesh["index_buffer"].Get("file_name").String()).Data
 
-		fmt.Println("indexbuffer length in bytes: ", len(indexBufferBytes))
 		for i := 0; i < len(indexBufferBytes); i += 2 {
 
 			var index int16
@@ -241,31 +234,31 @@ func (stl *STLWriter) writeModel(geom *DestinyGeometry) error {
 			indexBuffer = append(indexBuffer, index)
 		}
 
-		parts := mesh["stage_part_list"].([]interface{})
+		parts := mesh["stage_part_list"].Array()
 
 		// Loop through all the parts in the mesh
 		for i, partInterface := range parts {
-			part := partInterface.(map[string]interface{})
-			start := int(part["start_index"].(float64))
-			count := int(part["index_count"].(float64))
+			part := partInterface.Map()
+			start := int(part["start_index"].Float())
+			count := int(part["index_count"].Float())
 
 			// Check if this part has been duplciated
 			ignore := false
 			for j := 0; j < i; j++ {
-				jStartIndex := parts[j].(map[string]interface{})["start_index"].(float64)
-				jIndexCount := parts[j].(map[string]interface{})["index_count"].(float64)
+				jStartIndex := parts[j].Map()["start_index"].Float()
+				jIndexCount := parts[j].Map()["index_count"].Float()
 				if (start == int(jStartIndex)) || (count == int(jIndexCount)) {
 					ignore = true
 					break
 				}
 			}
 
-			lodCategoryValue := int(part["lod_category"].(map[string]interface{})["value"].(float64))
+			lodCategoryValue := int(part["lod_category"].Get("value").Float())
 			if (ignore == true) || (lodCategoryValue > 1) {
 				continue
 			}
 
-			primitiveType := int(part["primitive_type"].(float64))
+			primitiveType := int(part["primitive_type"].Float())
 			increment := 1
 
 			if primitiveType == 3 {
@@ -312,8 +305,7 @@ func (stl *STLWriter) writeModel(geom *DestinyGeometry) error {
 
 				// Write the normal and loop start to file
 				// the normal doesn't matter for this, the order of vertices does
-				bufferedWriter.Write([]byte("facet normal 0.0 0.0 0.0\n"))
-				bufferedWriter.Write([]byte("  outer loop\n"))
+				bufferedWriter.Write([]byte("facet normal 0.0 0.0 0.0\n  outer loop\n"))
 
 				// flip the triangle only when using primitive_type 5
 				if flip && (primitiveType == 5) {
@@ -323,7 +315,7 @@ func (stl *STLWriter) writeModel(geom *DestinyGeometry) error {
 							v[l] = (positions[indexBuffer[start+j+k]][l] + OffsetConstant) * ScaleConstant
 						}
 
-						bufferedWriter.Write([]byte(fmt.Sprintf("    vertex %f %f %f\n", v[0], v[1], v[2])))
+						bufferedWriter.Write([]byte(fmt.Sprintf("    vertex %.9f %.9f %.9f\n", v[0], v[1], v[2])))
 					}
 				} else {
 					// write the three vertices to the file in forward order
@@ -333,13 +325,12 @@ func (stl *STLWriter) writeModel(geom *DestinyGeometry) error {
 							v[l] = (positions[indexBuffer[start+j+k]][l] + OffsetConstant) * ScaleConstant
 						}
 
-						bufferedWriter.Write([]byte(fmt.Sprintf("    vertex %f %f %f\n", v[0], v[1], v[2])))
+						bufferedWriter.Write([]byte(fmt.Sprintf("    vertex %.9f %.9f %.9f\n", v[0], v[1], v[2])))
 					}
 				}
 
 				// Write the loop and normal end to file
-				bufferedWriter.Write([]byte("  endloop\n"))
-				bufferedWriter.Write([]byte("endfacet\n"))
+				bufferedWriter.Write([]byte("  endloop\nendfacet\n"))
 
 				flip = !flip
 			}
