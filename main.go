@@ -528,35 +528,78 @@ func (dae *DAEWriter) writeXML(positions []float64) error {
 		trianglesWriter.WriteString(fmt.Sprintf("%d ", i))
 	}
 
+	doc, colladaRoot := NewColladaDoc()
+
+	writeAssetElement(colladaRoot)
+
+	// TODO: These cannot be empty, need to add solid material data
+	materialID := "STL_material"
+	materialEffectName := "effect_STL_material"
+	writeLibraryMaterials(colladaRoot, materialID, materialEffectName)
+
+	writeLibraryEffects(colladaRoot, materialEffectName)
+
+	geometryID := "3054293897-0_0_1"
+	writeLibraryGeometries(colladaRoot, posWriter, normalWriter, trianglesWriter, len(positions), geometryID)
+
+	sceneID := 1
+	sceneName := fmt.Sprintf("scene%d", sceneID)
+	// TODO: This will be the same as the geometry names, should be taken from teh Geometry struct
+	nodeName := geometryID
+
+	writeLibraryVisualScenes(colladaRoot, sceneName, nodeName, geometryID)
+
+	writeSceneElement(colladaRoot, sceneName)
+
+	doc.Indent(2)
+	//doc.WriteTo(os.Stdout)
+
+	// Write this to a file now
+	outF, err := os.OpenFile(dae.Path, os.O_RDWR|os.O_CREATE, 0644)
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+	defer outF.Close()
+
+	doc.WriteTo(outF)
+
+	return nil
+}
+
+// NewColladaDoc will open a new XML document and write the correct header metadata and
+// return the root XML element.
+func NewColladaDoc() (*etree.Document, *etree.Element) {
 	doc := etree.NewDocument()
 	doc.CreateProcInst("xml", `version="1.0" encoding="UTF-8"`)
 	colladaRoot := doc.CreateElement("COLLADA")
 	colladaRoot.CreateAttr("xmlns", "http://www.collada.org/2005/11/COLLADASchema")
 	colladaRoot.CreateAttr("version", "1.4.1")
 
-	asset := colladaRoot.CreateElement("asset")
+	return doc, colladaRoot
+}
+
+func writeAssetElement(parent *etree.Element) {
+	asset := parent.CreateElement("asset")
 	asset.CreateElement("contributor").CreateElement("publishing_tool").CreateCharData("Destiny DAE Generator")
+
 	timestamp := time.Now().UTC().Format(time.RFC3339)
 	asset.CreateElement("created").CreateCharData(timestamp)
 	asset.CreateElement("modified").CreateCharData(timestamp)
 	asset.CreateElement("up_axis").CreateCharData("Y_UP")
+}
 
-	// TODO: These cannot be empty, need to add solid material data
-	libraryMaterials := colladaRoot.CreateElement("library_materials")
-
-	materialID := "STL_material"
-	materialEffectName := "effect_STL_material"
+func writeLibraryMaterials(parent *etree.Element, materialID, materialEffectName string) {
+	libraryMaterials := parent.CreateElement("library_materials")
 
 	material := libraryMaterials.CreateElement("material")
 	material.CreateAttr("id", materialID)
 	material.CreateAttr("name", materialID)
 	material.CreateElement("instance_effect").CreateAttr("url", fmt.Sprintf("#%s", materialEffectName))
-	/*
-			<material id="STL_material" name="STL_material">
-		      <instance_effect url="#effect_STL_material"/>
-		    </material>
-	*/
-	libraryEffects := colladaRoot.CreateElement("library_effects")
+}
+
+func writeLibraryEffects(parent *etree.Element, materialEffectName string) {
+	libraryEffects := parent.CreateElement("library_effects")
 
 	effect := libraryEffects.CreateElement("effect")
 	effect.CreateAttr("id", materialEffectName)
@@ -584,45 +627,12 @@ func (dae *DAEWriter) writeXML(positions []float64) error {
 
 	indexOfRefraction := phong.CreateElement("index_of_refraction")
 	indexOfRefraction.CreateElement("float").CreateCharData("1")
-	/**
-	  <effect id="effect_STL_material">
-	    <profile_COMMON>
-	     <technique sid="common">
-	      <phong>
-	       <ambient>
-	        <color>0 0 0 1</color>
-	       </ambient>
-	       <diffuse>
-	        <color>1 1 1 1</color>
-	       </diffuse>
-	       <reflective>
-	        <color>0 0 0 1</color>
-	       </reflective>
-	       <transparent opaque="A_ONE">
-	        <color>1 1 1 1</color>
-	       </transparent>
-	       <transparency>
-	        <float>1</float>
-	       </transparency>
-	       <index_of_refraction>
-	        <float>1</float>
-	       </index_of_refraction>
-	      </phong>
-	     </technique>
-	    </profile_COMMON>
-	    <extra>
-	     <technique profile="SceneKit">
-	      <litPerPixel>1</litPerPixel>
-	      <ambient_diffuse_lock>1</ambient_diffuse_lock>
-	     </technique>
-	    </extra>
-	   </effect>
-	   **/
+}
 
-	libGeometries := colladaRoot.CreateElement("library_geometries")
+func writeLibraryGeometries(parent *etree.Element, posWriter, normalWriter, trianglesWriter *bytes.Buffer, positionCount int, geometryID string) {
+	libGeometries := parent.CreateElement("library_geometries")
 
 	// TODO: This should actually be read from the DestinyGeometry type
-	geometryID := "3054293897-0_0_1"
 	geometry := libGeometries.CreateElement("geometry")
 	geometry.CreateAttr("id", geometryID)
 	geometry.CreateAttr("name", geometryID)
@@ -634,13 +644,13 @@ func (dae *DAEWriter) writeXML(positions []float64) error {
 
 	posFloatArray := posSource.CreateElement("float_array")
 	posFloatArray.CreateAttr("id", "ID2-array")
-	posFloatArray.CreateAttr("count", fmt.Sprintf("%d", len(positions)))
+	posFloatArray.CreateAttr("count", fmt.Sprintf("%d", positionCount))
 	posFloatArray.CreateCharData(strings.TrimSpace(posWriter.String()))
 
 	techniqueCommon := posSource.CreateElement("technique_common")
 	accessor := techniqueCommon.CreateElement("accessor")
 	accessor.CreateAttr("source", "#ID2-array")
-	accessor.CreateAttr("count", fmt.Sprintf("%d", len(positions)/3))
+	accessor.CreateAttr("count", fmt.Sprintf("%d", positionCount/3))
 	accessor.CreateAttr("stride", "3")
 
 	xParam := accessor.CreateElement("param")
@@ -658,13 +668,13 @@ func (dae *DAEWriter) writeXML(positions []float64) error {
 
 	normFloatArray := normalsSource.CreateElement("float_array")
 	normFloatArray.CreateAttr("id", "ID4-array")
-	normFloatArray.CreateAttr("count", fmt.Sprintf("%d", len(positions)))
+	normFloatArray.CreateAttr("count", fmt.Sprintf("%d", positionCount))
 	normFloatArray.CreateCharData(strings.TrimSpace(normalWriter.String()))
 
 	normTechniqueCommon := normalsSource.CreateElement("technique_common")
 	normAccessor := normTechniqueCommon.CreateElement("accessor")
 	normAccessor.CreateAttr("source", "#ID4-array")
-	normAccessor.CreateAttr("count", fmt.Sprintf("%d", len(positions)/3))
+	normAccessor.CreateAttr("count", fmt.Sprintf("%d", positionCount/3))
 	normAccessor.CreateAttr("stride", "3")
 
 	normXParam := normAccessor.CreateElement("param")
@@ -690,7 +700,7 @@ func (dae *DAEWriter) writeXML(positions []float64) error {
 	normalsInput.CreateAttr("source", "#geometrySource2")
 
 	// Triangles
-	triangleCount := ((len(positions) / 3) / 3)
+	triangleCount := ((positionCount / 3) / 3)
 	triangles := mesh.CreateElement("triangles")
 	triangles.CreateAttr("count", fmt.Sprintf("%d", triangleCount))
 	triangles.CreateAttr("material", "geometryElement5")
@@ -706,26 +716,12 @@ func (dae *DAEWriter) writeXML(positions []float64) error {
 	normalInput.CreateAttr("source", "#geometrySource2")
 
 	triangles.CreateElement("p").CreateCharData(trianglesWriter.String())
+}
 
-	sceneID := 1
-	sceneName := fmt.Sprintf("scene%d", sceneID)
-	// TODO: This will be the same as the geometry names, should be taken from teh Geometry struct
-	nodeName := geometryID
-
-	// 	<visual_scene id="scene6">
-	//    <node id="node7" name="3054293897-0_0_1">
-	//     <instance_geometry url="#3054293897-0_0_1">
-	//      <bind_material>
-	//       <technique_common>
-	//        <instance_material symbol="geometryElement5" target="#STL_material"/>
-	//       </technique_common>
-	//      </bind_material>
-	//     </instance_geometry>
-	//    </node>
-	//   </visual_scene>
-	libraryVisualScene := colladaRoot.CreateElement("library_visual_scenes")
+func writeLibraryVisualScenes(parent *etree.Element, sceneID, nodeName, geometryID string) {
+	libraryVisualScene := parent.CreateElement("library_visual_scenes")
 	visualScene := libraryVisualScene.CreateElement("visual_scene")
-	visualScene.CreateAttr("id", sceneName)
+	visualScene.CreateAttr("id", sceneID)
 
 	nodeID := 1
 	node := visualScene.CreateElement("node")
@@ -740,29 +736,9 @@ func (dae *DAEWriter) writeXML(positions []float64) error {
 	instanceMat := bindMatTechCommon.CreateElement("instance_material")
 	instanceMat.CreateAttr("symbol", "geometryElement5")
 	instanceMat.CreateAttr("target", "#STL_material")
-	/*
-			 <bind_material>
-		      <technique_common>
-		       <instance_material symbol="geometryElement5" target="#STL_material"/>
-		      </technique_common>
-		     </bind_material>
-	*/
+}
 
-	scene := colladaRoot.CreateElement("scene")
-	scene.CreateElement("instance_visual_scene").CreateAttr("url", fmt.Sprintf("#%s", sceneName))
-
-	doc.Indent(2)
-	//doc.WriteTo(os.Stdout)
-
-	// Write this to a file now
-	outF, err := os.OpenFile(dae.Path, os.O_WRONLY|os.O_APPEND, 0755)
-	if err != nil {
-		fmt.Println(err)
-		return err
-	}
-	defer outF.Close()
-
-	doc.WriteTo(outF)
-
-	return nil
+func writeSceneElement(parent *etree.Element, name string) {
+	scene := parent.CreateElement("scene")
+	scene.CreateElement("instance_visual_scene").CreateAttr("url", fmt.Sprintf("#%s", name))
 }
