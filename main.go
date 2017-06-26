@@ -54,6 +54,8 @@ type STLWriter struct {
 func main() {
 
 	for index, geometryFile := range LastWordGeometries {
+		fmt.Println("Parsing geometry file... ", geometryFile)
+
 		/*client := http.Client{}
 		req, _ := http.NewRequest("GET", BungieUrlPrefix+BungieGeometryPrefix+geometryFile, nil)
 		req.Header.Set("X-API-Key", BungieApiKey)
@@ -360,6 +362,7 @@ func (dae *DAEWriter) writeModel(geom *DestinyGeometry) error {
 
 	fmt.Printf("Successfully parsed meshes JSON\n")
 
+	positionVertices := make([]float64, 0, 1024)
 	for meshIndex, meshInterface := range meshes.Array() {
 		mesh := meshInterface.Map()
 		positions := [][]float64{}
@@ -409,8 +412,6 @@ func (dae *DAEWriter) writeModel(geom *DestinyGeometry) error {
 		}
 
 		parts := mesh["stage_part_list"].Array()
-
-		positionVertices := make([]float64, 0, 1024)
 
 		// Loop through all the parts in the mesh
 		for i, partInterface := range parts {
@@ -478,10 +479,6 @@ func (dae *DAEWriter) writeModel(geom *DestinyGeometry) error {
 					continue
 				}
 
-				// Write the normal and loop start to file
-				// the normal doesn't matter for this, the order of vertices does
-				//bufferedWriter.Write([]byte("facet normal 0.0 0.0 0.0\n  outer loop\n"))
-
 				// flip the triangle only when using primitive_type 5
 				if flip && (primitiveType == 5) {
 					for k := 2; k >= 0; k-- {
@@ -491,7 +488,6 @@ func (dae *DAEWriter) writeModel(geom *DestinyGeometry) error {
 						}
 
 						positionVertices = append(positionVertices, v[0], v[1], v[2])
-						//bufferedWriter.Write([]byte(fmt.Sprintf("    vertex %.9f %.9f %.9f\n", v[0], v[1], v[2])))
 					}
 				} else {
 					// write the three vertices to the file in forward order
@@ -502,26 +498,25 @@ func (dae *DAEWriter) writeModel(geom *DestinyGeometry) error {
 						}
 
 						positionVertices = append(positionVertices, v[0], v[1], v[2])
-						//bufferedWriter.Write([]byte(fmt.Sprintf("    vertex %.9f %.9f %.9f\n", v[0], v[1], v[2])))
 					}
 				}
 
-				// Write the loop and normal end to file
-				//bufferedWriter.Write([]byte("  endloop\nendfacet\n"))
-
 				flip = !flip
 			}
-
-			//bufferedWriter.Flush()
 		}
 
-		dae.writeXML(positionVertices)
 	}
+
+	dae.writeXML(positionVertices)
 
 	return nil
 }
 
 func (dae *DAEWriter) writeXML(positions []float64) error {
+
+	if len(positions) <= 0 {
+		return nil
+	}
 
 	posWriter := bytes.NewBufferString("")
 	normalWriter := bytes.NewBufferString("")
@@ -547,8 +542,83 @@ func (dae *DAEWriter) writeXML(positions []float64) error {
 	asset.CreateElement("up_axis").CreateCharData("Y_UP")
 
 	// TODO: These cannot be empty, need to add solid material data
-	colladaRoot.CreateElement("library_materials")
-	colladaRoot.CreateElement("library_effects")
+	libraryMaterials := colladaRoot.CreateElement("library_materials")
+
+	materialID := "STL_material"
+	materialEffectName := "effect_STL_material"
+
+	material := libraryMaterials.CreateElement("material")
+	material.CreateAttr("id", materialID)
+	material.CreateAttr("name", materialID)
+	material.CreateElement("instance_effect").CreateAttr("url", fmt.Sprintf("#%s", materialEffectName))
+	/*
+			<material id="STL_material" name="STL_material">
+		      <instance_effect url="#effect_STL_material"/>
+		    </material>
+	*/
+	libraryEffects := colladaRoot.CreateElement("library_effects")
+
+	effect := libraryEffects.CreateElement("effect")
+	effect.CreateAttr("id", materialEffectName)
+
+	profileCommon := effect.CreateElement("profile_COMMON")
+	technique := profileCommon.CreateElement("technique")
+	technique.CreateAttr("sid", "common")
+
+	phong := technique.CreateElement("phong")
+	ambient := phong.CreateElement("ambient")
+	ambient.CreateElement("color").CreateCharData("0 0 0 1")
+
+	diffuse := phong.CreateElement("diffuse")
+	diffuse.CreateElement("color").CreateCharData("1 1 1 1")
+
+	reflective := phong.CreateElement("reflective")
+	reflective.CreateElement("color").CreateCharData("0 0 0 1")
+
+	transparent := phong.CreateElement("transparent")
+	transparent.CreateAttr("opaque", "A_ONE")
+	transparent.CreateElement("color").CreateCharData("1 1 1 1")
+
+	transparency := phong.CreateElement("transparency")
+	transparency.CreateElement("float").CreateCharData("1")
+
+	indexOfRefraction := phong.CreateElement("index_of_refraction")
+	indexOfRefraction.CreateElement("float").CreateCharData("1")
+	/**
+	  <effect id="effect_STL_material">
+	    <profile_COMMON>
+	     <technique sid="common">
+	      <phong>
+	       <ambient>
+	        <color>0 0 0 1</color>
+	       </ambient>
+	       <diffuse>
+	        <color>1 1 1 1</color>
+	       </diffuse>
+	       <reflective>
+	        <color>0 0 0 1</color>
+	       </reflective>
+	       <transparent opaque="A_ONE">
+	        <color>1 1 1 1</color>
+	       </transparent>
+	       <transparency>
+	        <float>1</float>
+	       </transparency>
+	       <index_of_refraction>
+	        <float>1</float>
+	       </index_of_refraction>
+	      </phong>
+	     </technique>
+	    </profile_COMMON>
+	    <extra>
+	     <technique profile="SceneKit">
+	      <litPerPixel>1</litPerPixel>
+	      <ambient_diffuse_lock>1</ambient_diffuse_lock>
+	     </technique>
+	    </extra>
+	   </effect>
+	   **/
+
 	libGeometries := colladaRoot.CreateElement("library_geometries")
 
 	// TODO: This should actually be read from the DestinyGeometry type
@@ -623,7 +693,7 @@ func (dae *DAEWriter) writeXML(positions []float64) error {
 	triangleCount := ((len(positions) / 3) / 3)
 	triangles := mesh.CreateElement("triangles")
 	triangles.CreateAttr("count", fmt.Sprintf("%d", triangleCount))
-	triangles.CreateAttr("material", "geometrySource3")
+	triangles.CreateAttr("material", "geometryElement5")
 
 	vertexInput := triangles.CreateElement("input")
 	vertexInput.CreateAttr("semantic", "VERTEX")
@@ -665,11 +735,24 @@ func (dae *DAEWriter) writeXML(positions []float64) error {
 	instanceGeom := node.CreateElement("instance_geometry")
 	instanceGeom.CreateAttr("url", fmt.Sprintf("#%s", geometryID))
 
+	bindMaterial := instanceGeom.CreateElement("bind_material")
+	bindMatTechCommon := bindMaterial.CreateElement("technique_common")
+	instanceMat := bindMatTechCommon.CreateElement("instance_material")
+	instanceMat.CreateAttr("symbol", "geometryElement5")
+	instanceMat.CreateAttr("target", "#STL_material")
+	/*
+			 <bind_material>
+		      <technique_common>
+		       <instance_material symbol="geometryElement5" target="#STL_material"/>
+		      </technique_common>
+		     </bind_material>
+	*/
+
 	scene := colladaRoot.CreateElement("scene")
 	scene.CreateElement("instance_visual_scene").CreateAttr("url", fmt.Sprintf("#%s", sceneName))
 
 	doc.Indent(2)
-	doc.WriteTo(os.Stdout)
+	//doc.WriteTo(os.Stdout)
 
 	// Write this to a file now
 	outF, err := os.OpenFile(dae.Path, os.O_WRONLY|os.O_APPEND, 0755)
