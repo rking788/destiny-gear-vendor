@@ -24,8 +24,14 @@ const (
 )
 
 var (
-	BungieApiKey       = os.Getenv("BUNGIE_API_KEY")
-	LastWordGeometries = [5]string{"8458a82dec5290cdbc18fa568b94ff99.tgxm", "5bb9e8681f0423e7d89a1febe42457ec.tgxm", "cf97cbfcaae5736094c320b9e3378aa2.tgxm", "f878c2e86541fbf165747362eb3d54fc.tgxm", "4a00ec1e50813252fb0b1341adf1b675.tgxm"}
+	BungieApiKey = os.Getenv("BUNGIE_API_KEY")
+	//LastWordGeometries = [5]string{"8458a82dec5290cdbc18fa568b94ff99.tgxm", "5bb9e8681f0423e7d89a1febe42457ec.tgxm", "cf97cbfcaae5736094c320b9e3378aa2.tgxm", "f878c2e86541fbf165747362eb3d54fc.tgxm", "4a00ec1e50813252fb0b1341adf1b675.tgxm"}
+	LastWordGeometries  = [1]string{"5bb9e8681f0423e7d89a1febe42457ec.tgxm"}
+	NormalizationFactor = 65535.0
+	TexcoordOffset      = [2]float64{0.401725, 0.400094}
+	TexcoordScale       = [2]float64{0.396719, 0.396719}
+	//TexcoordOffset = [2]float64{0.0, 0.0}
+	//TexcoordScale  = [2]float64{1.0, 1.0}
 )
 
 type DestinyGeometry struct {
@@ -64,7 +70,7 @@ func main() {
 		bodyBytes, _ := ioutil.ReadAll(response.Body)
 		ioutil.WriteFile("./local_tools/geom/"+geometryFile, bodyBytes, 0644)*/
 
-		geometry := parseGeometryFile("./local_tools/geom/" + geometryFile)
+		geometry := parseGeometryFile("./local_tools/geom/geometry/" + geometryFile)
 
 		// stlWriter := &STLWriter{}
 		// err := stlWriter.writeModel(geometry)
@@ -175,6 +181,16 @@ func parseVertex(data []byte, vertexType string, offset int, stride int) [][]flo
 			out := make([]float32, 4)
 			binary.Read(bytes.NewBuffer(data[i:i+16]), binary.LittleEndian, out)
 			outFloats := []float64{float64(out[0]), float64(out[1]), float64(out[2]), float64(out[3])}
+			result = append(result, outFloats)
+		} else if vertexType == "_vertex_format_attribute_short2" {
+			out := make([]uint16, 2)
+			binary.Read(bytes.NewBuffer(data[i:i+4]), binary.LittleEndian, out)
+			outFloats := []float64{float64(out[0]), float64(out[1])}
+			result = append(result, outFloats)
+		} else if vertexType == "_vertex_format_attribute_float2" {
+			out := make([]float32, 2)
+			binary.Read(bytes.NewBuffer(data[i:i+8]), binary.LittleEndian, out)
+			outFloats := []float64{float64(out[0]), float64(out[1])}
 			result = append(result, outFloats)
 		} else {
 			fmt.Println("Found unknown vertex type!!")
@@ -289,7 +305,7 @@ func (stl *STLWriter) writeModel(geom *DestinyGeometry) error {
 			meshName := fmt.Sprintf("%s_%d_%d", geom.Name, meshIndex, i)
 
 			// TODO: This should check if the file exists and remove it first probably
-			f, err := os.OpenFile("lastword.stl", os.O_WRONLY|os.O_APPEND, 0755)
+			f, err := os.OpenFile("lastword.stl", os.O_RDWR|os.O_CREATE, 0644)
 			if err != nil {
 				return err
 			}
@@ -363,10 +379,16 @@ func (dae *DAEWriter) writeModel(geom *DestinyGeometry) error {
 	fmt.Printf("Successfully parsed meshes JSON\n")
 
 	positionVertices := make([]float64, 0, 1024)
+	texcoords := make([]float64, 0, 1024)
 	for meshIndex, meshInterface := range meshes.Array() {
+		if meshIndex != 1 {
+			//continue
+		}
+
 		mesh := meshInterface.Map()
 		positions := [][]float64{}
 		normals := [][]float64{}
+		innerTexcoords := [][]float64{}
 		defVB := mesh["stage_part_vertex_stream_layout_definitions"].Array()[0].Map()["formats"].Array()
 
 		for index, vbInterface := range mesh["vertex_buffers"].Array() {
@@ -390,8 +412,18 @@ func (dae *DAEWriter) writeModel(geom *DestinyGeometry) error {
 				switch element["semantic"].String() {
 				case "_tfx_vb_semantic_position":
 					positions = parseVertex(data, elementType, int(elementOffset), int(stride))
+					fmt.Printf("Found positions: %d\n", len(positions))
 				case "_tfx_vb_semantic_normal":
 					normals = parseVertex(data, elementType, int(elementOffset), int(stride))
+					fmt.Printf("Found normals: len=%d\n", len(normals))
+				case "_tfx_vb_semantic_texcoord":
+					if elementType != "_vertex_format_attribute_float2" {
+						innerTexcoords = parseVertex(data, elementType, int(elementOffset), int(stride))
+						fmt.Printf("Found textcoords: len=%d\n", len(innerTexcoords))
+					} else {
+						_ = parseVertex(data, elementType, int(elementOffset), int(stride))
+						//fmt.Printf("Found float texcoords: %+v\n", throwaway)
+					}
 				}
 			}
 		}
@@ -454,18 +486,6 @@ func (dae *DAEWriter) writeModel(geom *DestinyGeometry) error {
 			flip := false
 
 			// Construct and write this mesh header
-			meshName := fmt.Sprintf("%s_%d_%d", geom.Name, meshIndex, i)
-
-			// TODO: This should check if the file exists and remove it first probably
-			f, err := os.OpenFile("lastword.stl", os.O_WRONLY|os.O_APPEND, 0755)
-			if err != nil {
-				return err
-			}
-			defer f.Close()
-
-			bufferedWriter := bufio.NewWriter(f)
-			bufferedWriter.Write([]byte(fmt.Sprintf("solid %s\n", meshName)))
-
 			for j := 0; j < count; j += increment {
 
 				if (start + j + 2) >= len(indexBuffer) {
@@ -487,7 +507,15 @@ func (dae *DAEWriter) writeModel(geom *DestinyGeometry) error {
 							v[l] = (positions[indexBuffer[start+j+k]][l] + OffsetConstant) * ScaleConstant
 						}
 
+						tex := [2]float64{}
+						for l := 0; l < 2; l++ {
+							offset := TexcoordOffset[l]
+							scale := TexcoordScale[l]
+							tex[l] = (((innerTexcoords[indexBuffer[start+j+k]][l]) / NormalizationFactor) * scale) + offset
+						}
+
 						positionVertices = append(positionVertices, v[0], v[1], v[2])
+						texcoords = append(texcoords, tex[0], tex[1])
 					}
 				} else {
 					// write the three vertices to the file in forward order
@@ -497,7 +525,15 @@ func (dae *DAEWriter) writeModel(geom *DestinyGeometry) error {
 							v[l] = (positions[indexBuffer[start+j+k]][l] + OffsetConstant) * ScaleConstant
 						}
 
+						tex := [2]float64{}
+						for l := 0; l < 2; l++ {
+							offset := TexcoordOffset[l]
+							scale := TexcoordScale[l]
+							tex[l] = (((innerTexcoords[indexBuffer[start+j+k]][l]) / NormalizationFactor) * scale) + offset
+						}
+
 						positionVertices = append(positionVertices, v[0], v[1], v[2])
+						texcoords = append(texcoords, tex[0], tex[1])
 					}
 				}
 
@@ -505,14 +541,19 @@ func (dae *DAEWriter) writeModel(geom *DestinyGeometry) error {
 			}
 		}
 
+		// for _, coordPair := range innerTexcoords {
+		// 	adjusted0 := (float64(coordPair[0])/32768.0 + OffsetConstant) * 1.0
+		// 	adjusted1 := ((coordPair[1] / 32768.0) + OffsetConstant) * 1.0
+		// 	texcoords = append(texcoords, adjusted0, adjusted1)
+		// }
 	}
 
-	dae.writeXML(positionVertices)
+	dae.writeXML(positionVertices, texcoords)
 
 	return nil
 }
 
-func (dae *DAEWriter) writeXML(positions []float64) error {
+func (dae *DAEWriter) writeXML(positions, texcoords []float64) error {
 
 	if len(positions) <= 0 {
 		return nil
@@ -521,6 +562,7 @@ func (dae *DAEWriter) writeXML(positions []float64) error {
 	posWriter := bytes.NewBufferString("")
 	normalWriter := bytes.NewBufferString("")
 	trianglesWriter := bytes.NewBufferString("")
+	texcoordsWriter := bytes.NewBufferString("")
 
 	for i, pos := range positions {
 		posWriter.WriteString(fmt.Sprintf("%f ", pos))
@@ -528,9 +570,14 @@ func (dae *DAEWriter) writeXML(positions []float64) error {
 		trianglesWriter.WriteString(fmt.Sprintf("%d ", i))
 	}
 
+	for _, coord := range texcoords {
+		texcoordsWriter.WriteString(fmt.Sprintf("%f ", coord))
+	}
+
 	doc, colladaRoot := NewColladaDoc()
 
 	writeAssetElement(colladaRoot)
+	writeImageLibraryElement(colladaRoot)
 
 	// TODO: These cannot be empty, need to add solid material data
 	materialID := "STL_material"
@@ -540,7 +587,7 @@ func (dae *DAEWriter) writeXML(positions []float64) error {
 	writeLibraryEffects(colladaRoot, materialEffectName)
 
 	geometryID := "3054293897-0_0_1"
-	writeLibraryGeometries(colladaRoot, posWriter, normalWriter, trianglesWriter, len(positions), geometryID)
+	writeLibraryGeometries(colladaRoot, posWriter, normalWriter, texcoordsWriter, trianglesWriter, len(positions), len(texcoords), geometryID)
 
 	sceneID := 1
 	sceneName := fmt.Sprintf("scene%d", sceneID)
@@ -589,6 +636,16 @@ func writeAssetElement(parent *etree.Element) {
 	asset.CreateElement("up_axis").CreateCharData("Y_UP")
 }
 
+func writeImageLibraryElement(parent *etree.Element) {
+
+	imgName := "742477913_exotic_01_frame_gbit_384_192-2.jpg"
+	libImages := parent.CreateElement("library_images")
+	img1 := libImages.CreateElement("image")
+	img1.CreateAttr("id", "image1")
+	initFrom := img1.CreateElement("init_from")
+	initFrom.CreateCharData(fmt.Sprintf("./%s", imgName))
+}
+
 func writeLibraryMaterials(parent *etree.Element, materialID, materialEffectName string) {
 	libraryMaterials := parent.CreateElement("library_materials")
 
@@ -596,6 +653,11 @@ func writeLibraryMaterials(parent *etree.Element, materialID, materialEffectName
 	material.CreateAttr("id", materialID)
 	material.CreateAttr("name", materialID)
 	material.CreateElement("instance_effect").CreateAttr("url", fmt.Sprintf("#%s", materialEffectName))
+
+	texMaterial := libraryMaterials.CreateElement("material")
+	texMaterial.CreateAttr("id", "lambert1")
+	texMaterial.CreateAttr("name", "lambert1")
+	texMaterial.CreateElement("instance_effect").CreateAttr("url", fmt.Sprintf("#effect_lambert1"))
 }
 
 func writeLibraryEffects(parent *etree.Element, materialEffectName string) {
@@ -627,9 +689,75 @@ func writeLibraryEffects(parent *etree.Element, materialEffectName string) {
 
 	indexOfRefraction := phong.CreateElement("index_of_refraction")
 	indexOfRefraction.CreateElement("float").CreateCharData("1")
+
+	/**
+	 * Lambert1 effects
+	 **/
+	lambertEffect := libraryEffects.CreateElement("effect")
+	lambertEffect.CreateAttr("id", "effect_lambert1")
+
+	lambertProfileCommon := lambertEffect.CreateElement("profile_COMMON")
+
+	imgSurfNewParam := lambertProfileCommon.CreateElement("newparam")
+	imgSurfNewParam.CreateAttr("sid", "ID2_image1_surface")
+
+	surface := imgSurfNewParam.CreateElement("surface")
+	surface.CreateAttr("type", "2D")
+	surface.CreateElement("init_from").CreateCharData("image1")
+
+	imageNewParam := lambertProfileCommon.CreateElement("newparam")
+	imageNewParam.CreateAttr("sid", "ID2_image1")
+
+	sampler2D := imageNewParam.CreateElement("sampler2D")
+	sampler2D.CreateElement("source").CreateCharData("ID2_image1_surface")
+	sampler2D.CreateElement("wrap_s").CreateCharData("CLAMP")
+	sampler2D.CreateElement("wrap_t").CreateCharData("CLAMP")
+	sampler2D.CreateElement("minfilter").CreateCharData("LINEAR")
+	sampler2D.CreateElement("magfilter").CreateCharData("LINEAR")
+	sampler2D.CreateElement("mipfilter").CreateCharData("LINEAR")
+
+	lambertTechnique := lambertProfileCommon.CreateElement("technique")
+	lambertTechnique.CreateAttr("sid", "common")
+
+	blinn := lambertTechnique.CreateElement("blinn")
+	blinnAmbient := blinn.CreateElement("ambient")
+	blinnAmbient.CreateElement("color").CreateCharData("1 1 1 1")
+
+	blinnDiffuse := blinn.CreateElement("diffuse")
+	diffuseTexture := blinnDiffuse.CreateElement("texture")
+	diffuseTexture.CreateAttr("texture", "ID2_image1")
+	diffuseTexture.CreateAttr("texcoord", "CHANNEL2")
+
+	blinnSpecular := blinn.CreateElement("specular")
+	blinnSpecular.CreateElement("color").CreateCharData("0.496564 0.496564 0.496564 1")
+
+	blinnShininess := blinn.CreateElement("shininess")
+	blinnShininess.CreateElement("float").CreateCharData("0.022516")
+
+	blinnReflective := blinn.CreateElement("reflective")
+	blinnReflective.CreateElement("color").CreateCharData("0 0 0 1")
+
+	blinnTransparent := blinn.CreateElement("transparent")
+	blinnTransparent.CreateAttr("opaque", "A_ONE")
+	blinnTransparent.CreateElement("color").CreateCharData("0.998203 1 1 1")
+
+	blinnTransparency := blinn.CreateElement("transparency")
+	blinnTransparency.CreateElement("float").CreateCharData("1")
+
+	blinnIndexOfRefraction := blinn.CreateElement("index_of_refraction")
+	blinnIndexOfRefraction.CreateElement("float").CreateCharData("1")
+
+	lambertExtra := lambertEffect.CreateElement("extra")
+	lambertExtraTech := lambertExtra.CreateElement("technique")
+	lambertExtraTech.CreateElement("litPerPixel").CreateCharData("1")
+	lambertExtraTech.CreateElement("ambient_diffuse_lock").CreateCharData("1")
+
+	lambertExtraIntensities := lambertExtraTech.CreateElement("intensities")
+	emission := lambertExtraIntensities.CreateElement("emission")
+	emission.CreateElement("float").CreateCharData("0.5")
 }
 
-func writeLibraryGeometries(parent *etree.Element, posWriter, normalWriter, trianglesWriter *bytes.Buffer, positionCount int, geometryID string) {
+func writeLibraryGeometries(parent *etree.Element, posWriter, normalWriter, texcoordWriter, trianglesWriter *bytes.Buffer, positionCount int, texcoordCount int, geometryID string) {
 	libGeometries := parent.CreateElement("library_geometries")
 
 	// TODO: This should actually be read from the DestinyGeometry type
@@ -687,6 +815,28 @@ func writeLibraryGeometries(parent *etree.Element, posWriter, normalWriter, tria
 	normZParam.CreateAttr("name", "Y")
 	normZParam.CreateAttr("type", "float")
 
+	texcoordSource := mesh.CreateElement("source")
+	texcoordSource.CreateAttr("id", "geometrySource7")
+
+	texcoordFloatArray := texcoordSource.CreateElement("float_array")
+	texcoordFloatArray.CreateAttr("id", "ID8-array")
+	texcoordFloatArray.CreateAttr("count", fmt.Sprintf("%d", texcoordCount))
+	texcoordFloatArray.CreateCharData(strings.TrimSpace(texcoordWriter.String()))
+
+	texcoordTechCommon := texcoordSource.CreateElement("technique_common")
+	texcoordAccessor := texcoordTechCommon.CreateElement("accessor")
+	texcoordAccessor.CreateAttr("source", "#ID8-array")
+	texcoordAccessor.CreateAttr("count", fmt.Sprintf("%d", texcoordCount/2))
+	texcoordAccessor.CreateAttr("stride", "2")
+
+	sParam := texcoordAccessor.CreateElement("param")
+	sParam.CreateAttr("name", "S")
+	sParam.CreateAttr("type", "float")
+
+	tParam := texcoordAccessor.CreateElement("param")
+	tParam.CreateAttr("name", "T")
+	tParam.CreateAttr("type", "float")
+
 	// Vertices
 	verticesElem := mesh.CreateElement("vertices")
 	verticesElem.CreateAttr("id", "geometrySource1-vertices")
@@ -715,6 +865,12 @@ func writeLibraryGeometries(parent *etree.Element, posWriter, normalWriter, tria
 	normalInput.CreateAttr("offset", "0")
 	normalInput.CreateAttr("source", "#geometrySource2")
 
+	texcoordInput := triangles.CreateElement("input")
+	texcoordInput.CreateAttr("semantic", "TEXCOORD")
+	texcoordInput.CreateAttr("offset", "0")
+	texcoordInput.CreateAttr("source", "#geometrySource7")
+	texcoordInput.CreateAttr("set", "1")
+
 	triangles.CreateElement("p").CreateCharData(trianglesWriter.String())
 }
 
@@ -735,7 +891,12 @@ func writeLibraryVisualScenes(parent *etree.Element, sceneID, nodeName, geometry
 	bindMatTechCommon := bindMaterial.CreateElement("technique_common")
 	instanceMat := bindMatTechCommon.CreateElement("instance_material")
 	instanceMat.CreateAttr("symbol", "geometryElement5")
-	instanceMat.CreateAttr("target", "#STL_material")
+	instanceMat.CreateAttr("target", "#lambert1")
+
+	bindVertexInput := instanceMat.CreateElement("bind_vertex_input")
+	bindVertexInput.CreateAttr("semantic", "CHANNEL2")
+	bindVertexInput.CreateAttr("input_semantic", "TEXCOORD")
+	bindVertexInput.CreateAttr("input_set", "1")
 }
 
 func writeSceneElement(parent *etree.Element, name string) {

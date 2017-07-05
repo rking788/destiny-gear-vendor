@@ -1,0 +1,697 @@
+{
+  "render_model": {
+    "render_meshes": [
+      {
+        "position_offset": [
+          0.069153,
+          7.2E-05,
+          0.059056
+        ],
+        "position_scale": [
+          0.126229,
+          0.126229,
+          0.126229
+        ],
+        "texcoord0_scale_offset": [
+          0.396719,
+          0.396719,
+          0.401725,
+          0.400094
+        ],
+        "texcoord_offset": [
+          0.401725,
+          0.400094
+        ],
+        "texcoord_scale": [
+          0.396719,
+          0.396719
+        ],
+        "stage_part_offsets": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          2,
+          2,
+          4,
+          4,
+          4,
+          4,
+          4,
+          4,
+          4,
+          4,
+          4,
+          4
+        ],
+        "index_buffer": {
+          "file_name": "0.indexbuffer.tgx",
+          "byte_size": 360,
+          "value_byte_size": 2
+        },
+        "vertex_buffers": [
+          {
+            "file_name": "0.0.vertexbuffer.tgx",
+            "byte_size": 1760,
+            "stride_byte_size": 16
+          },
+          {
+            "file_name": "0.1.vertexbuffer.tgx",
+            "byte_size": 2200,
+            "stride_byte_size": 20
+          }
+        ],
+        "stage_part_list": [
+          {
+            "shader": {
+              "static_textures": [
+                "1735486583_fotc_decals_common_diffuse"
+              ],
+              "type": 8
+            },
+            "variant_shader_index": -1,
+            "start_index": 1,
+            "index_count": 73,
+            "index_min": 0,
+            "index_max": 43,
+            "flags": 37,
+            "gear_dye_change_color_index": 0,
+            "external_identifier": 0,
+            "primitive_type": 5,
+            "lod_category": {
+              "value": 8,
+              "name": "_lod_category_23"
+            },
+            "lod_run": 1
+          },
+          {
+            "shader": {
+              "static_textures": [
+                "1735486583_fotc_decals_common_diffuse"
+              ],
+              "type": 8
+            },
+            "variant_shader_index": -1,
+            "start_index": 77,
+            "index_count": 103,
+            "index_min": 44,
+            "index_max": 109,
+            "flags": 37,
+            "gear_dye_change_color_index": 0,
+            "external_identifier": 0,
+            "primitive_type": 5,
+            "lod_category": {
+              "value": 1,
+              "name": "_lod_category_01"
+            },
+            "lod_run": 1
+          },
+          {
+            "shader": {
+              "static_textures": [
+                "1735486583_fotc_decals_common_diffuse"
+              ],
+              "type": 8
+            },
+            "variant_shader_index": -1,
+            "start_index": 1,
+            "index_count": 73,
+            "index_min": 0,
+            "index_max": 43,
+            "flags": 37,
+            "gear_dye_change_color_index": 0,
+            "external_identifier": 0,
+            "primitive_type": 5,
+            "lod_category": {
+              "value": 8,
+              "name": "_lod_category_23"
+            },
+            "lod_run": 1
+          },
+          {
+            "shader": {
+              "static_textures": [
+                "1735486583_fotc_decals_common_diffuse"
+              ],
+              "type": 8
+            },
+            "variant_shader_index": -1,
+            "start_index": 77,
+            "index_count": 103,
+            "index_min": 44,
+            "index_max": 109,
+            "flags": 37,
+            "gear_dye_change_color_index": 0,
+            "external_identifier": 0,
+            "primitive_type": 5,
+            "lod_category": {
+              "value": 1,
+              "name": "_lod_category_01"
+            },
+            "lod_run": 1
+          }
+        ],
+        "stage_part_vertex_stream_layout_definitions": [
+          {
+            "type": "_vertex_stream_layout_ao_precise_optimized_normal",
+            "formats": [
+              {
+                "stride": 16,
+                "elements": [
+                  {
+                    "type": "_vertex_format_attribute_float4",
+                    "semantic": "_tfx_vb_semantic_position",
+                    "normalized": false,
+                    "size": 16,
+                    "offset": 0,
+                    "semantic_index": 0
+                  }
+                ]
+              },
+              {
+                "stride": 20,
+                "elements": [
+                  {
+                    "type": "_vertex_format_attribute_short2",
+                    "semantic": "_tfx_vb_semantic_texcoord",
+                    "normalized": true,
+                    "size": 4,
+                    "offset": 0,
+                    "semantic_index": 0
+                  },
+                  {
+                    "type": "_vertex_format_attribute_short4",
+                    "semantic": "_tfx_vb_semantic_normal",
+                    "normalized": true,
+                    "size": 8,
+                    "offset": 4,
+                    "semantic_index": 0
+                  },
+                  {
+                    "type": "_vertex_format_attribute_short4",
+                    "semantic": "_tfx_vb_semantic_tangent",
+                    "normalized": true,
+                    "size": 8,
+                    "offset": 12,
+                    "semantic_index": 0
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "stage_part_vertex_stream_layout_lookup": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "bounding_volume": {
+          "min_x": 0.0266195275,
+          "max_x": 0.0631318241,
+          "min_y": -0.025260862,
+          "max_y": 0.0254048631,
+          "min_z": 0.113088652,
+          "max_z": 0.1511727
+        }
+      },
+      {
+        "position_offset": [
+          0.069153,
+          7.2E-05,
+          0.059056
+        ],
+        "position_scale": [
+          0.126229,
+          0.126229,
+          0.126229
+        ],
+        "texcoord0_scale_offset": [
+          0.396719,
+          0.396719,
+          0.401725,
+          0.400094
+        ],
+        "texcoord_offset": [
+          0.401725,
+          0.400094
+        ],
+        "texcoord_scale": [
+          0.396719,
+          0.396719
+        ],
+        "stage_part_offsets": [
+          0,
+          4,
+          4,
+          4,
+          8,
+          8,
+          8,
+          8,
+          8,
+          8,
+          8,
+          8,
+          8,
+          12,
+          12,
+          12,
+          12,
+          12,
+          12,
+          12
+        ],
+        "index_buffer": {
+          "file_name": "1.indexbuffer.tgx",
+          "byte_size": 8464,
+          "value_byte_size": 2
+        },
+        "vertex_buffers": [
+          {
+            "file_name": "1.0.vertexbuffer.tgx",
+            "byte_size": 35744,
+            "stride_byte_size": 16
+          },
+          {
+            "file_name": "1.1.vertexbuffer.tgx",
+            "byte_size": 62552,
+            "stride_byte_size": 28
+          }
+        ],
+        "stage_part_list": [
+          {
+            "shader": {
+              "static_textures": [
+                "3006666228_cubemap_dots_white_env",
+                "2462278047_gear_detail_env_noise_dif"
+              ],
+              "type": 9
+            },
+            "variant_shader_index": -1,
+            "start_index": 1,
+            "index_count": 236,
+            "index_min": 0,
+            "index_max": 123,
+            "flags": 5,
+            "gear_dye_change_color_index": 0,
+            "external_identifier": 0,
+            "primitive_type": 5,
+            "lod_category": {
+              "value": 8,
+              "name": "_lod_category_23"
+            },
+            "lod_run": 1
+          },
+          {
+            "shader": {
+              "static_textures": [
+                "3006666228_cubemap_dots_white_env",
+                "2462278047_gear_detail_env_noise_dif"
+              ],
+              "type": 9
+            },
+            "variant_shader_index": -1,
+            "start_index": 239,
+            "index_count": 2907,
+            "index_min": 124,
+            "index_max": 1641,
+            "flags": 5,
+            "gear_dye_change_color_index": 0,
+            "external_identifier": 0,
+            "primitive_type": 5,
+            "lod_category": {
+              "value": 1,
+              "name": "_lod_category_01"
+            },
+            "lod_run": 2
+          },
+          {
+            "shader": {
+              "static_textures": [
+                "3006666228_cubemap_dots_white_env",
+                "2462278047_gear_detail_env_noise_dif"
+              ],
+              "type": 9
+            },
+            "variant_shader_index": -1,
+            "start_index": 3149,
+            "index_count": 356,
+            "index_min": 1642,
+            "index_max": 1933,
+            "flags": 5,
+            "gear_dye_change_color_index": 0,
+            "external_identifier": 0,
+            "primitive_type": 5,
+            "lod_category": {
+              "value": 1,
+              "name": "_lod_category_01"
+            },
+            "lod_run": 1
+          },
+          {
+            "shader": {
+              "static_textures": [
+                "3006666228_cubemap_dots_white_env",
+                "2462278047_gear_detail_env_noise_dif"
+              ],
+              "type": 9
+            },
+            "variant_shader_index": -1,
+            "start_index": 3507,
+            "index_count": 725,
+            "index_min": 1934,
+            "index_max": 2233,
+            "flags": 5,
+            "gear_dye_change_color_index": 2,
+            "external_identifier": 0,
+            "primitive_type": 5,
+            "lod_category": {
+              "value": 1,
+              "name": "_lod_category_01"
+            },
+            "lod_run": 1
+          },
+          {
+            "shader": {
+              "type": 7
+            },
+            "variant_shader_index": -1,
+            "start_index": 1,
+            "index_count": 236,
+            "index_min": 0,
+            "index_max": 123,
+            "flags": 5,
+            "gear_dye_change_color_index": 0,
+            "external_identifier": 0,
+            "primitive_type": 5,
+            "lod_category": {
+              "value": 8,
+              "name": "_lod_category_23"
+            },
+            "lod_run": 1
+          },
+          {
+            "shader": {
+              "type": 7
+            },
+            "variant_shader_index": -1,
+            "start_index": 239,
+            "index_count": 2907,
+            "index_min": 124,
+            "index_max": 1641,
+            "flags": 5,
+            "gear_dye_change_color_index": 0,
+            "external_identifier": 0,
+            "primitive_type": 5,
+            "lod_category": {
+              "value": 1,
+              "name": "_lod_category_01"
+            },
+            "lod_run": 2
+          },
+          {
+            "shader": {
+              "type": 7
+            },
+            "variant_shader_index": -1,
+            "start_index": 3149,
+            "index_count": 356,
+            "index_min": 1642,
+            "index_max": 1933,
+            "flags": 5,
+            "gear_dye_change_color_index": 0,
+            "external_identifier": 0,
+            "primitive_type": 5,
+            "lod_category": {
+              "value": 1,
+              "name": "_lod_category_01"
+            },
+            "lod_run": 1
+          },
+          {
+            "shader": {
+              "type": 7
+            },
+            "variant_shader_index": -1,
+            "start_index": 3507,
+            "index_count": 725,
+            "index_min": 1934,
+            "index_max": 2233,
+            "flags": 5,
+            "gear_dye_change_color_index": 2,
+            "external_identifier": 0,
+            "primitive_type": 5,
+            "lod_category": {
+              "value": 1,
+              "name": "_lod_category_01"
+            },
+            "lod_run": 1
+          },
+          {
+            "shader": {
+              "type": 7
+            },
+            "variant_shader_index": -1,
+            "start_index": 1,
+            "index_count": 236,
+            "index_min": 0,
+            "index_max": 123,
+            "flags": 5,
+            "gear_dye_change_color_index": 0,
+            "external_identifier": 0,
+            "primitive_type": 5,
+            "lod_category": {
+              "value": 8,
+              "name": "_lod_category_23"
+            },
+            "lod_run": 1
+          },
+          {
+            "shader": {
+              "type": 7
+            },
+            "variant_shader_index": -1,
+            "start_index": 239,
+            "index_count": 2907,
+            "index_min": 124,
+            "index_max": 1641,
+            "flags": 5,
+            "gear_dye_change_color_index": 0,
+            "external_identifier": 0,
+            "primitive_type": 5,
+            "lod_category": {
+              "value": 1,
+              "name": "_lod_category_01"
+            },
+            "lod_run": 2
+          },
+          {
+            "shader": {
+              "type": 7
+            },
+            "variant_shader_index": -1,
+            "start_index": 3149,
+            "index_count": 356,
+            "index_min": 1642,
+            "index_max": 1933,
+            "flags": 5,
+            "gear_dye_change_color_index": 0,
+            "external_identifier": 0,
+            "primitive_type": 5,
+            "lod_category": {
+              "value": 1,
+              "name": "_lod_category_01"
+            },
+            "lod_run": 1
+          },
+          {
+            "shader": {
+              "type": 7
+            },
+            "variant_shader_index": -1,
+            "start_index": 3507,
+            "index_count": 725,
+            "index_min": 1934,
+            "index_max": 2233,
+            "flags": 5,
+            "gear_dye_change_color_index": 2,
+            "external_identifier": 0,
+            "primitive_type": 5,
+            "lod_category": {
+              "value": 1,
+              "name": "_lod_category_01"
+            },
+            "lod_run": 1
+          }
+        ],
+        "stage_part_vertex_stream_layout_definitions": [
+          {
+            "type": "_vertex_stream_layout_ao_precise_optimized_threshold",
+            "formats": [
+              {
+                "stride": 16,
+                "elements": [
+                  {
+                    "type": "_vertex_format_attribute_float4",
+                    "semantic": "_tfx_vb_semantic_position",
+                    "normalized": false,
+                    "size": 16,
+                    "offset": 0,
+                    "semantic_index": 0
+                  }
+                ]
+              },
+              {
+                "stride": 28,
+                "elements": [
+                  {
+                    "type": "_vertex_format_attribute_short2",
+                    "semantic": "_tfx_vb_semantic_texcoord",
+                    "normalized": true,
+                    "size": 4,
+                    "offset": 0,
+                    "semantic_index": 0
+                  },
+                  {
+                    "type": "_vertex_format_attribute_short4",
+                    "semantic": "_tfx_vb_semantic_normal",
+                    "normalized": true,
+                    "size": 8,
+                    "offset": 4,
+                    "semantic_index": 0
+                  },
+                  {
+                    "type": "_vertex_format_attribute_short4",
+                    "semantic": "_tfx_vb_semantic_tangent",
+                    "normalized": true,
+                    "size": 8,
+                    "offset": 12,
+                    "semantic_index": 0
+                  },
+                  {
+                    "type": "_vertex_format_attribute_float2",
+                    "semantic": "_tfx_vb_semantic_texcoord",
+                    "normalized": false,
+                    "size": 8,
+                    "offset": 20,
+                    "semantic_index": 2
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "stage_part_vertex_stream_layout_lookup": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "bounding_volume": {
+          "min_x": -0.057076,
+          "max_x": 0.195382,
+          "min_y": -0.02514144,
+          "max_y": 0.0251429062,
+          "min_z": -0.0503152534,
+          "max_z": 0.168427259
+        }
+      }
+    ]
+  },
+  "texture_plates": [
+    {
+      "gear_decal_dye_index": -1,
+      "number_of_plateable_gear_slots": 0,
+      "number_of_gear_slots": 0,
+      "plate_set": {
+        "diffuse": {
+          "reference_id": "ed92e4c0e293b1feab5c5cec27420d1d",
+          "plate_index": 0,
+          "plate_size": [
+            512,
+            512
+          ],
+          "texture_placements": [
+            {
+              "texture_size_x": 384,
+              "texture_size_y": 192,
+              "position_x": 0,
+              "position_y": 0,
+              "texture_tag_name": "742477913_exotic_01_frame_gbit_384_192_0"
+            }
+          ]
+        },
+        "normal": {
+          "reference_id": "6697d55f01421ddf6e3e6b031ddc21ca",
+          "plate_index": 0,
+          "plate_size": [
+            512,
+            512
+          ],
+          "texture_placements": [
+            {
+              "texture_size_x": 384,
+              "texture_size_y": 192,
+              "position_x": 0,
+              "position_y": 0,
+              "texture_tag_name": "742477913_exotic_01_frame_gbit_384_192_1"
+            }
+          ]
+        },
+        "gearstack": {
+          "reference_id": "7f137e64f42b79b07f5606844a45904e",
+          "plate_index": 0,
+          "plate_size": [
+            512,
+            512
+          ],
+          "texture_placements": [
+            {
+              "texture_size_x": 384,
+              "texture_size_y": 192,
+              "position_x": 0,
+              "position_y": 0,
+              "texture_tag_name": "742477913_exotic_01_frame_gbit_384_192_2"
+            }
+          ]
+        }
+      },
+      "gear_slot_requires_plating": true
+    }
+  ]
+}
