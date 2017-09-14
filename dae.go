@@ -10,11 +10,15 @@ import (
 	"github.com/beevik/etree"
 )
 
+const (
+	IncludeTextures = true
+)
+
 type DAEWriter struct {
 	Path string
 }
 
-func (dae *DAEWriter) writeXML(positions, texcoords []float64) error {
+func (dae *DAEWriter) writeXML(positions []float64, texcoords []float32) error {
 
 	if len(positions) <= 0 {
 		return nil
@@ -32,7 +36,7 @@ func (dae *DAEWriter) writeXML(positions, texcoords []float64) error {
 	}
 
 	for _, coord := range texcoords {
-		texcoordsWriter.WriteString(fmt.Sprintf("%.9f ", coord))
+		texcoordsWriter.WriteString(fmt.Sprintf("%.6f ", coord))
 	}
 
 	doc, colladaRoot := NewColladaDoc()
@@ -276,27 +280,29 @@ func writeLibraryGeometries(parent *etree.Element, posWriter, normalWriter, texc
 	normZParam.CreateAttr("name", "Y")
 	normZParam.CreateAttr("type", "float")
 
-	texcoordSource := mesh.CreateElement("source")
-	texcoordSource.CreateAttr("id", "geometrySource7")
+	if IncludeTextures {
+		texcoordSource := mesh.CreateElement("source")
+		texcoordSource.CreateAttr("id", "geometrySource7")
 
-	texcoordFloatArray := texcoordSource.CreateElement("float_array")
-	texcoordFloatArray.CreateAttr("id", "ID8-array")
-	texcoordFloatArray.CreateAttr("count", fmt.Sprintf("%d", texcoordCount))
-	texcoordFloatArray.CreateCharData(strings.TrimSpace(texcoordWriter.String()))
+		texcoordFloatArray := texcoordSource.CreateElement("float_array")
+		texcoordFloatArray.CreateAttr("id", "ID8-array")
+		texcoordFloatArray.CreateAttr("count", fmt.Sprintf("%d", texcoordCount))
+		texcoordFloatArray.CreateCharData(strings.TrimSpace(texcoordWriter.String()))
 
-	texcoordTechCommon := texcoordSource.CreateElement("technique_common")
-	texcoordAccessor := texcoordTechCommon.CreateElement("accessor")
-	texcoordAccessor.CreateAttr("source", "#ID8-array")
-	texcoordAccessor.CreateAttr("count", fmt.Sprintf("%d", texcoordCount/2))
-	texcoordAccessor.CreateAttr("stride", "2")
+		texcoordTechCommon := texcoordSource.CreateElement("technique_common")
+		texcoordAccessor := texcoordTechCommon.CreateElement("accessor")
+		texcoordAccessor.CreateAttr("source", "#ID8-array")
+		texcoordAccessor.CreateAttr("count", fmt.Sprintf("%d", texcoordCount/2))
+		texcoordAccessor.CreateAttr("stride", "2")
 
-	sParam := texcoordAccessor.CreateElement("param")
-	sParam.CreateAttr("name", "S")
-	sParam.CreateAttr("type", "float")
+		sParam := texcoordAccessor.CreateElement("param")
+		sParam.CreateAttr("name", "S")
+		sParam.CreateAttr("type", "float")
 
-	tParam := texcoordAccessor.CreateElement("param")
-	tParam.CreateAttr("name", "T")
-	tParam.CreateAttr("type", "float")
+		tParam := texcoordAccessor.CreateElement("param")
+		tParam.CreateAttr("name", "T")
+		tParam.CreateAttr("type", "float")
+	}
 
 	// Vertices
 	verticesElem := mesh.CreateElement("vertices")

@@ -14,15 +14,18 @@ import (
 
 const (
 	BungieUrlPrefix      = "http://www.bungie.net"
-	BungieGeometryPrefix = "/common/destiny_content/geometry/platform/mobile/geometry/"
+	BungieGeometryPrefix = "/common/destiny2_content/geometry/platform/mobile/geometry/"
 	OffsetConstant       = 0.0
 	ScaleConstant        = 1000.0
+	ModelNamePrefix      = "sunshot"
 )
 
 var (
 	BungieApiKey = os.Getenv("BUNGIE_API_KEY")
 	//LastWordGeometries = [5]string{"8458a82dec5290cdbc18fa568b94ff99.tgxm", "5bb9e8681f0423e7d89a1febe42457ec.tgxm", "cf97cbfcaae5736094c320b9e3378aa2.tgxm", "f878c2e86541fbf165747362eb3d54fc.tgxm", "4a00ec1e50813252fb0b1341adf1b675.tgxm"}
-	LastWordGeometries = [1]string{"5bb9e8681f0423e7d89a1febe42457ec.tgxm"}
+	//LastWordGeometries = [5]string{"8458a82dec5290cdbc18fa568b94ff99.tgxm", "5bb9e8681f0423e7d89a1febe42457ec.tgxm", "cf97cbfcaae5736094c320b9e3378aa2.tgxm"}
+	//LastWordGeometries = [1]string{"5bb9e8681f0423e7d89a1febe42457ec.tgxm"}
+	SunshotGeometries = []string{"21b966d2b3e9338b49b5243ecbdcccca.tgxm", "57152585e9f5300a5475478c8ea1f448.tgxm", "60fc8d77e90b35adddf0a99a99facf35.tgxm", "ae800a88325ed4b9e7bc32c86182ae75.tgxm", "defdbb6dcbce8fcd85422f44e53bc4c2.tgxm"}
 
 	// Unused coord pair: [1.3330078125, 2.666015625]
 	/*"texcoord_offset": [
@@ -35,10 +38,11 @@ var (
 	  ],*/
 	//UnusedX        = 1.3330078125
 	//UnusedY        = 2.66015625
-	UnusedX        = 1.333333333333333
-	UnusedY        = 2.666666666666667
-	TexcoordOffset = [2]float64{0.401725, 0.400094}
-	TexcoordScale  = [2]float64{0.396719, 0.396719}
+	//UnusedX          = 1.333333333333333
+	//UnusedY          = 2.666666666666667
+	ManualOffsets  = [2]float32{-0.0, -0.0}
+	TexcoordOffset = [2]float32{0.401725, 0.400094}
+	TexcoordScale  = [2]float32{0.396719, 0.396719}
 )
 
 type DestinyGeometry struct {
@@ -57,22 +61,22 @@ type GeometryFile struct {
 	Data      []byte
 }
 
-type texcoordVal float64
+type texcoordVal float32
 
-func (f texcoordVal) normalize(bitNum float64) float64 {
-	max := texcoordVal(math.Pow(2, bitNum-1) - 1.0)
+func (f texcoordVal) normalize(bitNum float32) float32 {
+	max := texcoordVal(math.Pow(2, float64(bitNum-1)) - 1.0)
 	ret := math.Max(float64(f/max), -1)
-	return ret
+	return float32(ret)
 }
 
-func (f texcoordVal) unsignedNormalize(bitNum float64) float64 {
+func (f texcoordVal) unsignedNormalize(bitNum float64) float32 {
 	max := texcoordVal(math.Pow(2, bitNum) - 1)
-	return float64(f / max)
+	return float32(float64(f) / float64(max))
 }
 
 func main() {
 
-	for index, geometryFile := range LastWordGeometries {
+	for index, geometryFile := range SunshotGeometries {
 		fmt.Println("Parsing geometry file... ", geometryFile)
 
 		/*client := http.Client{}
@@ -88,7 +92,7 @@ func main() {
 		// stlWriter := &STLWriter{}
 		// err := stlWriter.writeModel(geometry)
 
-		daeWriter := &DAEWriter{fmt.Sprintf("lastword%d-auto.dae", index)}
+		daeWriter := &DAEWriter{fmt.Sprintf(ModelNamePrefix+"%d-auto.dae", index)}
 		err := daeWriter.writeModel(geometry)
 		if err != nil {
 			fmt.Println("Error trying to write the model file!!: ", err.Error())
@@ -165,7 +169,7 @@ func parseGeometryFile(path string) *DestinyGeometry {
 		}
 	}
 
-	ioutil.WriteFile("./local_tools/lastword-meshes.json", geom.MeshesBytes, 0644)
+	ioutil.WriteFile("./local_tools/"+ModelNamePrefix+"-meshes.json", geom.MeshesBytes, 0644)
 
 	return geom
 }
@@ -212,6 +216,28 @@ func parseVertex(data []byte, vertexType string, offset int, stride int) [][]flo
 	return result
 }
 
+func parseVertex32(data []byte, vertexType string, offset int, stride int) [][]float32 {
+
+	result := make([][]float32, 0, 10)
+	for i := offset; i < len(data); i += stride {
+
+		if vertexType == "_vertex_format_attribute_short2" {
+			out := make([]int16, 2)
+			binary.Read(bytes.NewBuffer(data[i:i+4]), binary.LittleEndian, out)
+			outFloats := []float32{float32(out[0]), float32(out[1])}
+			result = append(result, outFloats)
+		} else if vertexType == "_vertex_format_attribute_float2" {
+			out := make([]float32, 2)
+			binary.Read(bytes.NewBuffer(data[i:i+8]), binary.LittleEndian, out)
+			outFloats := []float32{float32(out[0]), float32(out[1])}
+			result = append(result, outFloats)
+		} else {
+			fmt.Println("Found unknown vertex type!!")
+		}
+	}
+	return result
+}
+
 func (dae *DAEWriter) writeModel(geom *DestinyGeometry) error {
 
 	result := gjson.Parse(string(geom.MeshesBytes))
@@ -225,17 +251,17 @@ func (dae *DAEWriter) writeModel(geom *DestinyGeometry) error {
 	fmt.Printf("Successfully parsed meshes JSON\n")
 
 	positionVertices := make([]float64, 0, 1024)
-	texcoords := make([]float64, 0, 1024)
+	texcoords := make([]float32, 0, 1024)
 	for meshIndex, meshInterface := range meshes.Array() {
 		if meshIndex != 1 {
-			continue
+			//continue
 		}
 
 		mesh := meshInterface.Map()
 		positions := [][]float64{}
 		normals := [][]float64{}
-		innerTexcoords := [][]float64{}
-		adjustments := [][]float64{}
+		innerTexcoords := [][]float32{}
+		adjustments := [][]float32{}
 		defVB := mesh["stage_part_vertex_stream_layout_definitions"].Array()[0].Map()["formats"].Array()
 
 		for index, vbInterface := range mesh["vertex_buffers"].Array() {
@@ -266,16 +292,21 @@ func (dae *DAEWriter) writeModel(geom *DestinyGeometry) error {
 					fmt.Printf("Found normals: len=%d\n", len(normals))
 				case "_tfx_vb_semantic_texcoord":
 					if elementType != "_vertex_format_attribute_float2" {
-						innerTexcoords = parseVertex(data, elementType, int(elementOffset), int(stride))
+						innerTexcoords = parseVertex32(data, elementType, int(elementOffset), int(stride))
 						fmt.Printf("Found textcoords: len=%d\n", len(innerTexcoords))
 					} else {
-						adjustments = parseVertex(data, elementType, int(elementOffset), int(stride))
+						adjustments = parseVertex32(data, elementType, int(elementOffset), int(stride))
 						fmt.Printf("Found adjustments: %d\n", len(adjustments))
 						//fmt.Printf("Found float texcoords: %+v\n", throwaway)
 					}
 				}
 			}
 		}
+
+		minS := [2]float32{0.0, 0.0}
+		minT := [2]float32{0.0, 0.0}
+		maxS := [2]float32{0.0, 0.0}
+		maxT := [2]float32{0.0, 0.0}
 
 		if len(positions) == 0 || len(normals) == 0 || len(positions) != len(normals) {
 			return errors.New("Positions slice is not the same size as the normals slice")
@@ -351,26 +382,41 @@ func (dae *DAEWriter) writeModel(geom *DestinyGeometry) error {
 						v[l] = (positions[indexBuffer[start+j+tri[k]]][l] + OffsetConstant) * ScaleConstant
 					}
 
-					tex := [2]float64{}
-					fmt.Printf("Normal indices: ")
+					tex := [2]float32{}
+					//fmt.Printf("Normal indices: ")
 					for l := 0; l < 2; l++ {
 						offset := TexcoordOffset[l]
 						scale := TexcoordScale[l]
-						adjustment := 1.0
+						adjustment := float32(1.0)
 						if len(adjustments) > 0 {
 							adjustment = adjustments[indexBuffer[start+j+tri[k]]][l]
 						}
 						//adjustment = 1.0
-						fmt.Printf("%d,", indexBuffer[start+j+tri[k]])
-						tex[l] = ((texcoordVal(innerTexcoords[indexBuffer[start+j+tri[k]]][l])).normalize(16) * scale * adjustment) + offset
+						//fmt.Printf("%d,", indexBuffer[start+j+tri[k]])
+						tex[l] = (((texcoordVal(innerTexcoords[indexBuffer[start+j+tri[k]]][l])).normalize(16) * scale * adjustment) + offset) + ManualOffsets[l]
 					}
 
-					fmt.Println()
+					if tex[0] < minS[0] {
+						minS = tex
+					}
+					if tex[1] < minT[1] {
+						minT = tex
+					}
+					if tex[0] > maxS[0] {
+						maxS = tex
+					}
+					if tex[1] > maxT[1] {
+						maxT = tex
+					}
+
+					//fmt.Println()
 					positionVertices = append(positionVertices, v[0], v[1], v[2])
 					texcoords = append(texcoords, tex[0], tex[1])
 				}
 			}
 		}
+
+		fmt.Printf("minS=%v, maxS=%v, minT=%v, maxT=%v\n", minS, maxS, minT, maxT)
 
 		// for _, buffer := range positions {
 		// 	positionVertices = append(positionVertices, buffer[0], buffer[1], buffer[2])
