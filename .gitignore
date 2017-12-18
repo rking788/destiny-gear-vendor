@@ -1,2 +1,5 @@
 local_tools
 working
+destiny-dae-transformer
+*.dae
+.DS_Store
