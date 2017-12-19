@@ -3,21 +3,44 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"math"
 	"os"
+	"strconv"
+	"strings"
 
 	"github.com/tidwall/gjson"
 )
 
+/****** TODO *******
+- Request and parse asset manifest from the manifest endpoint
+- Find a mapping of the item definition to the asset definition
+- pull geom (.tgx) and texture (.tgx.bin) files out of the item definition for the male index set
+- use those values in the the "SunshotGeometries" instead of the hardcoded .tgxm paths
+*******************/
+
+/**
+	"mobileGearCDN": {
+	"Geometry": "/common/destiny2_content/geometry/platform/mobile/geometry",
+	"Texture": "/common/destiny2_content/geometry/platform/mobile/textures",
+	"PlateRegion": "/common/destiny2_content/geometry/platform/mobile/plated_textures",
+	"Gear": "/common/destiny2_content/geometry/gear",
+	"Shader": "/common/destiny2_content/geometry/platform/mobile/shaders"
+**/
+
 const (
-	BungieUrlPrefix      = "http://www.bungie.net"
-	BungieGeometryPrefix = "/common/destiny2_content/geometry/platform/mobile/geometry/"
-	OffsetConstant       = 0.0
-	ScaleConstant        = 1000.0
-	ModelNamePrefix      = "sunshot"
+	BungieUrlPrefix          = "http://www.bungie.net"
+	BungieGeometryPrefix     = "/common/destiny2_content/geometry/platform/mobile/geometry/"
+	BungieTexturePrefix      = "/common/destiny2_content/geometry/platform/mobile/textures"
+	BungieGearPrefix         = "/common/destiny2_content/geometry/gear"
+	BungiePlatedRegionPrefix = "/common/destiny2_content/geometry/platform/mobile/plated_textures"
+	BungieShaderPrefix       = "/common/destiny2_content/geometry/platform/mobile/shaders"
+	OffsetConstant           = 0.0
+	ScaleConstant            = 1000.0
+	ModelNamePrefix          = "sunshot"
 )
 
 var (
@@ -74,31 +97,94 @@ func (f texcoordVal) unsignedNormalize(bitNum float64) float32 {
 	return float32(float64(f) / float64(max))
 }
 
+type GearAssetDefinition struct {
+	Gear    []string       `json:"gear"`
+	Content []*GearContent `json:"content"`
+}
+
+type GearContent struct {
+	Platform        string                 `json:"platform"`
+	Geometry        []string               `json:"geometry"`
+	Textures        []string               `json:"textures"`
+	DyeIndexSet     *IndexSet              `json:"dye_index_set"`
+	RegionIndexSets map[string][]*IndexSet `json:"region_index_sets"`
+}
+
+func (g *GearContent) String() string {
+	return fmt.Sprintf("%+v", *g)
+}
+
+type IndexSet struct {
+	Textures []int `json:"textures"`
+	Geometry []int `json:"geometry"`
+}
+
+func (is *IndexSet) String() string {
+	return fmt.Sprintf("%+v", *is)
+}
+
 func main() {
 
-	for index, geometryFile := range SunshotGeometries {
-		fmt.Println("Parsing geometry file... ", geometryFile)
+	// TODO: Given some item hash, this should make a request for the item spec including
+	// all of the geometry files and texture files
 
-		/*client := http.Client{}
-		req, _ := http.NewRequest("GET", BungieUrlPrefix+BungieGeometryPrefix+geometryFile, nil)
-		req.Header.Set("X-API-Key", BungieApiKey)
-		response, _ := client.Do(req)
-
-		bodyBytes, _ := ioutil.ReadAll(response.Body)
-		ioutil.WriteFile("./local_tools/geom/"+geometryFile, bodyBytes, 0644)*/
-
-		geometry := parseGeometryFile("./local_tools/geom/geometry/" + geometryFile)
-
-		// stlWriter := &STLWriter{}
-		// err := stlWriter.writeModel(geometry)
-
-		daeWriter := &DAEWriter{fmt.Sprintf(ModelNamePrefix+"%d-auto.dae", index)}
-		err := daeWriter.writeModel(geometry)
-		if err != nil {
-			fmt.Println("Error trying to write the model file!!: ", err.Error())
-			return
-		}
+	if len(os.Args) < 2 {
+		fmt.Println("Forgot to provide an item hash!")
+		return
 	}
+
+	hash, err := strconv.ParseInt(os.Args[1], 10, 64)
+	if err != nil {
+		fmt.Printf("Error parsing item hash from command line arg: %s\n", err.Error())
+		return
+	}
+	db, err := GetAssetDBConnection()
+	if err != nil {
+		fmt.Printf("Error opening DB connection: %s\n", err.Error())
+		return
+	}
+
+	definition, err := db.GetAssetDefinition(uint(hash))
+	if err != nil {
+		fmt.Printf("Failed to request item by hash from Asset DB: %s\n", err.Error())
+		return
+	}
+
+	assetDefinition := &GearAssetDefinition{}
+	decoder := json.NewDecoder(strings.NewReader(definition))
+	err = decoder.Decode(assetDefinition)
+	if err != nil {
+		fmt.Printf("Failed to decode asset definition from the DB: %s\n", err.Error())
+		return
+	}
+
+	fmt.Printf("Ready to go with this item def: %+v\n", assetDefinition)
+
+	/***** TODO: Uncomment the stuff below this *****/
+
+	// for index, geometryFile := range SunshotGeometries {
+	// 	fmt.Println("Parsing geometry file... ", geometryFile)
+
+	// 	/*client := http.Client{}
+	// 	req, _ := http.NewRequest("GET", BungieUrlPrefix+BungieGeometryPrefix+geometryFile, nil)
+	// 	req.Header.Set("X-API-Key", BungieApiKey)
+	// 	response, _ := client.Do(req)
+
+	// 	bodyBytes, _ := ioutil.ReadAll(response.Body)
+	// 	ioutil.WriteFile("./local_tools/geom/"+geometryFile, bodyBytes, 0644)*/
+
+	// 	geometry := parseGeometryFile("./local_tools/geom/geometry/" + geometryFile)
+
+	// 	// stlWriter := &STLWriter{}
+	// 	// err := stlWriter.writeModel(geometry)
+
+	// 	daeWriter := &DAEWriter{fmt.Sprintf(ModelNamePrefix+"%d-auto.dae", index)}
+	// 	err := daeWriter.writeModel(geometry)
+	// 	if err != nil {
+	// 		fmt.Println("Error trying to write the model file!!: ", err.Error())
+	// 		return
+	// 	}
+	// }
 }
 
 func parseGeometryFile(path string) *DestinyGeometry {
