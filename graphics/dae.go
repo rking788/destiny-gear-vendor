@@ -1,17 +1,17 @@
-package main
+package graphics
 
 import (
 	"bytes"
+	"encoding/binary"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/beevik/etree"
-)
-
-const (
-	IncludeTextures = true
+	"github.com/rking788/destiny-gear-vendor/bungie"
+	"github.com/tidwall/gjson"
 )
 
 type DAEWriter struct {
@@ -280,7 +280,7 @@ func writeLibraryGeometries(parent *etree.Element, posWriter, normalWriter, texc
 	normZParam.CreateAttr("name", "Y")
 	normZParam.CreateAttr("type", "float")
 
-	if IncludeTextures {
+	if includeTextures {
 		texcoordSource := mesh.CreateElement("source")
 		texcoordSource.CreateAttr("id", "geometrySource7")
 
@@ -369,4 +369,197 @@ func writeLibraryVisualScenes(parent *etree.Element, sceneID, nodeName, geometry
 func writeSceneElement(parent *etree.Element, name string) {
 	scene := parent.CreateElement("scene")
 	scene.CreateElement("instance_visual_scene").CreateAttr("url", fmt.Sprintf("#%s", name))
+}
+
+func (dae *DAEWriter) WriteModels(geoms []*bungie.DestinyGeometry) error {
+
+	positionVertices := make([]float64, 0, 10240)
+	texcoords := make([]float32, 0, 10240)
+
+	for _, geom := range geoms {
+		result := gjson.Parse(string(geom.MeshesBytes))
+
+		meshes := result.Get("render_model.render_meshes")
+		if meshes.Exists() == false {
+			err := errors.New("Error unmarshaling mesh JSON: render meshes not found")
+			return err
+		}
+
+		fmt.Printf("Successfully parsed meshes JSON\n")
+
+		for meshIndex, meshInterface := range meshes.Array() {
+			if meshIndex != 1 {
+				//continue
+			}
+
+			mesh := meshInterface.Map()
+			positions := [][]float64{}
+			normals := [][]float64{}
+			innerTexcoords := [][]float32{}
+			adjustments := [][]float32{}
+			defVB := mesh["stage_part_vertex_stream_layout_definitions"].Array()[0].Map()["formats"].Array()
+
+			for index, vbInterface := range mesh["vertex_buffers"].Array() {
+				currentDefVB := defVB[index].Map()
+				vertexBuffers := vbInterface.Map()
+				stride := currentDefVB["stride"].Float()
+				if stride != vertexBuffers["stride_byte_size"].Float() {
+					return errors.New("Mismatched stride sizes found")
+				}
+
+				data := geom.GetFileByName(vertexBuffers["file_name"].String()).Data
+				fmt.Println("Reading data from file: ", vertexBuffers["file_name"].String())
+				if data == nil {
+					return errors.New("Missing geometry file by name: " + vertexBuffers["file_name"].String())
+				}
+
+				for _, elementInterface := range currentDefVB["elements"].Array() {
+					element := elementInterface.Map()
+					elementType := element["type"].String()
+					elementOffset := element["offset"].Float()
+
+					switch element["semantic"].String() {
+					case "_tfx_vb_semantic_position":
+						positions = parseVertex(data, elementType, int(elementOffset), int(stride))
+						fmt.Printf("Found positions: %d\n", len(positions))
+					case "_tfx_vb_semantic_normal":
+						normals = parseVertex(data, elementType, int(elementOffset), int(stride))
+						fmt.Printf("Found normals: len=%d\n", len(normals))
+					case "_tfx_vb_semantic_texcoord":
+						if elementType != "_vertex_format_attribute_float2" {
+							innerTexcoords = parseVertex32(data, elementType, int(elementOffset), int(stride))
+							fmt.Printf("Found textcoords: len=%d\n", len(innerTexcoords))
+						} else {
+							adjustments = parseVertex32(data, elementType, int(elementOffset), int(stride))
+							fmt.Printf("Found adjustments: %d\n", len(adjustments))
+							//fmt.Printf("Found float texcoords: %+v\n", throwaway)
+						}
+					}
+				}
+			}
+
+			minS := [2]float32{0.0, 0.0}
+			minT := [2]float32{0.0, 0.0}
+			maxS := [2]float32{0.0, 0.0}
+			maxT := [2]float32{0.0, 0.0}
+
+			if len(positions) == 0 || len(normals) == 0 || len(positions) != len(normals) {
+				return errors.New("Positions slice is not the same size as the normals slice")
+			}
+
+			// Parse the index buffer
+			indexBuffer := make([]int16, 0)
+			indexBufferBytes := geom.GetFileByName(mesh["index_buffer"].Get("file_name").String()).Data
+
+			for i := 0; i < len(indexBufferBytes); i += 2 {
+
+				var index int16
+				binary.Read(bytes.NewBuffer(indexBufferBytes[i:i+2]), binary.LittleEndian, &index)
+				indexBuffer = append(indexBuffer, index)
+			}
+
+			parts := mesh["stage_part_list"].Array()
+
+			// Loop through all the parts in the mesh
+			for i, partInterface := range parts {
+				part := partInterface.Map()
+				start := int(part["start_index"].Float())
+				count := int(part["index_count"].Float())
+
+				// Check if this part has been duplciated
+				ignore := false
+				for j := 0; j < i; j++ {
+					jStartIndex := parts[j].Map()["start_index"].Float()
+					jIndexCount := parts[j].Map()["index_count"].Float()
+					if (start == int(jStartIndex)) || (count == int(jIndexCount)) {
+						ignore = true
+						break
+					}
+				}
+
+				lodCategoryValue := int(part["lod_category"].Get("value").Float())
+				if (ignore == true) || (lodCategoryValue > 1) {
+					continue
+				}
+
+				// PrimitiveType, 3=TRIANGLES, 5=TRIANGLE_STRIP
+				// https://stackoverflow.com/questions/3485034/convert-triangle-strips-to-triangles
+
+				// Process indexBuffer in sets of 3
+				primitiveType := int(part["primitive_type"].Float())
+				increment := 3
+
+				if primitiveType == 5 {
+					// Process indexBuffer as triangle strip
+					increment = 1
+					count -= 2
+				} else if primitiveType != 3 {
+					fmt.Println("Unknown primitive type, skipping this part...")
+					continue
+				}
+
+				// Construct and write this mesh header
+				for j := 0; j < count; j += increment {
+
+					// Skip if any two of the indexBuffer match (ignoring lines or points)
+					if indexBuffer[start+j+0] == indexBuffer[start+j+1] || indexBuffer[start+j+0] == indexBuffer[start+j+2] || indexBuffer[start+j+1] == indexBuffer[start+j+2] {
+						continue
+					}
+
+					tri := [3]int{0, 1, 2}
+					if (primitiveType == 3) || ((j & 1) == 1) {
+						tri = [3]int{2, 1, 0}
+					}
+
+					for k := 0; k < 3; k++ {
+						v := [4]float64{}
+						for l := 0; l < 4; l++ {
+							v[l] = (positions[indexBuffer[start+j+tri[k]]][l] + offsetConstant) * scaleConstant
+						}
+
+						tex := [2]float32{}
+						//fmt.Printf("Normal indices: ")
+						for l := 0; l < 2; l++ {
+							offset := texcoordOffset[l]
+							scale := texcoordScale[l]
+							adjustment := float32(1.0)
+							if len(adjustments) > 0 {
+								adjustment = adjustments[indexBuffer[start+j+tri[k]]][l]
+							}
+							//adjustment = 1.0
+							//fmt.Printf("%d,", indexBuffer[start+j+tri[k]])
+							tex[l] = (((texcoordVal(innerTexcoords[indexBuffer[start+j+tri[k]]][l])).normalize(16) * scale * adjustment) + offset) + manualOffsets[l]
+						}
+
+						if tex[0] < minS[0] {
+							minS = tex
+						}
+						if tex[1] < minT[1] {
+							minT = tex
+						}
+						if tex[0] > maxS[0] {
+							maxS = tex
+						}
+						if tex[1] > maxT[1] {
+							maxT = tex
+						}
+
+						//fmt.Println()
+						positionVertices = append(positionVertices, v[0], v[1], v[2])
+						texcoords = append(texcoords, tex[0], tex[1])
+					}
+				}
+			}
+
+			fmt.Printf("minS=%v, maxS=%v, minT=%v, maxT=%v\n", minS, maxS, minT, maxT)
+
+			// for _, buffer := range positions {
+			// 	positionVertices = append(positionVertices, buffer[0], buffer[1], buffer[2])
+			// }
+		}
+	}
+
+	dae.writeXML(positionVertices, texcoords)
+
+	return nil
 }

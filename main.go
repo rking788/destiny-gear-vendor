@@ -3,29 +3,45 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
-	"errors"
+	"flag"
 	"fmt"
 	"io/ioutil"
-	"math"
+	"net/http"
 	"os"
 
-	"github.com/tidwall/gjson"
+	"github.com/gorilla/mux"
+
+	"github.com/rking788/destiny-gear-vendor/bungie"
+	"github.com/rking788/destiny-gear-vendor/graphics"
 )
 
+/****** TODO *******
+- pull geom (.tgx) and texture (.tgx.bin) files out of the item definition for the male index set
+*******************/
+
+/**
+	"mobileGearCDN": {
+	"Geometry": "/common/destiny2_content/geometry/platform/mobile/geometry",
+	"Texture": "/common/destiny2_content/geometry/platform/mobile/textures",
+	"PlateRegion": "/common/destiny2_content/geometry/platform/mobile/plated_textures",
+	"Gear": "/common/destiny2_content/geometry/gear",
+	"Shader": "/common/destiny2_content/geometry/platform/mobile/shaders"
+**/
+
 const (
-	BungieUrlPrefix      = "http://www.bungie.net"
-	BungieGeometryPrefix = "/common/destiny2_content/geometry/platform/mobile/geometry/"
-	OffsetConstant       = 0.0
-	ScaleConstant        = 1000.0
-	ModelNamePrefix      = "sunshot"
+	ModelPathPrefix       = "./output/"
+	ModelNamePrefix       = ModelPathPrefix + "better-devils"
+	TexturePathPrefix     = "./output/"
+	LocalGeometryBasePath = "./local_tools/geom/geometry/"
+	LocalTextureBasePath  = "./local_tools/geom/textures/"
 )
 
 var (
 	BungieApiKey = os.Getenv("BUNGIE_API_KEY")
+
 	//LastWordGeometries = [5]string{"8458a82dec5290cdbc18fa568b94ff99.tgxm", "5bb9e8681f0423e7d89a1febe42457ec.tgxm", "cf97cbfcaae5736094c320b9e3378aa2.tgxm", "f878c2e86541fbf165747362eb3d54fc.tgxm", "4a00ec1e50813252fb0b1341adf1b675.tgxm"}
-	//LastWordGeometries = [5]string{"8458a82dec5290cdbc18fa568b94ff99.tgxm", "5bb9e8681f0423e7d89a1febe42457ec.tgxm", "cf97cbfcaae5736094c320b9e3378aa2.tgxm"}
-	//LastWordGeometries = [1]string{"5bb9e8681f0423e7d89a1febe42457ec.tgxm"}
-	SunshotGeometries = []string{"21b966d2b3e9338b49b5243ecbdcccca.tgxm", "57152585e9f5300a5475478c8ea1f448.tgxm", "60fc8d77e90b35adddf0a99a99facf35.tgxm", "ae800a88325ed4b9e7bc32c86182ae75.tgxm", "defdbb6dcbce8fcd85422f44e53bc4c2.tgxm"}
+
+	// SunshotGeometries = []string{"21b966d2b3e9338b49b5243ecbdcccca.tgxm", "57152585e9f5300a5475478c8ea1f448.tgxm", "60fc8d77e90b35adddf0a99a99facf35.tgxm", "ae800a88325ed4b9e7bc32c86182ae75.tgxm", "defdbb6dcbce8fcd85422f44e53bc4c2.tgxm"}
 
 	// Unused coord pair: [1.3330078125, 2.666015625]
 	/*"texcoord_offset": [
@@ -40,68 +56,161 @@ var (
 	//UnusedY        = 2.66015625
 	//UnusedX          = 1.333333333333333
 	//UnusedY          = 2.666666666666667
-	ManualOffsets  = [2]float32{-0.0, -0.0}
-	TexcoordOffset = [2]float32{0.401725, 0.400094}
-	TexcoordScale  = [2]float32{0.396719, 0.396719}
 )
-
-type DestinyGeometry struct {
-	Extension   string
-	HeaderSize  int32
-	FileCount   int32
-	Name        string
-	MeshesBytes []byte
-	Files       []*GeometryFile
-}
-
-type GeometryFile struct {
-	Name      string
-	StartAddr int64
-	Length    int64
-	Data      []byte
-}
-
-type texcoordVal float32
-
-func (f texcoordVal) normalize(bitNum float32) float32 {
-	max := texcoordVal(math.Pow(2, float64(bitNum-1)) - 1.0)
-	ret := math.Max(float64(f/max), -1)
-	return float32(ret)
-}
-
-func (f texcoordVal) unsignedNormalize(bitNum float64) float32 {
-	max := texcoordVal(math.Pow(2, bitNum) - 1)
-	return float32(float64(f) / float64(max))
-}
 
 func main() {
 
-	for index, geometryFile := range SunshotGeometries {
-		fmt.Println("Parsing geometry file... ", geometryFile)
+	isCLI := flag.Bool("cli", false, "Use this flag to indicate that the program is being run"+
+		" as a CLI program and should print the path to the expected output when done instead"+
+		" of running a web server")
+	itemHash := flag.Uint("hash", 0, "The item hash from the manifest DB for the asset to use")
+	withSTL := flag.Bool("stl", false, "Use this to request STL format assets")
+	withDAE := flag.Bool("dae", false, "Use this flag to request DAE format assets")
+	withGeom := flag.Bool("geom", false, "Indicates that geometries should be parsed and written")
+	withTextures := flag.Bool("textures", false, "Indicates that textures should be processed")
+	flag.Parse()
 
-		/*client := http.Client{}
-		req, _ := http.NewRequest("GET", BungieUrlPrefix+BungieGeometryPrefix+geometryFile, nil)
-		req.Header.Set("X-API-Key", BungieApiKey)
-		response, _ := client.Do(req)
+	fmt.Printf("IsCLI: %v\n", *isCLI)
 
-		bodyBytes, _ := ioutil.ReadAll(response.Body)
-		ioutil.WriteFile("./local_tools/geom/"+geometryFile, bodyBytes, 0644)*/
+	if *isCLI {
+		executeCommand(*itemHash, *withSTL, *withDAE, *withGeom, *withTextures)
+		return
+	}
 
-		geometry := parseGeometryFile("./local_tools/geom/geometry/" + geometryFile)
+	port := os.Getenv("PORT")
+	if port == "" {
+		fmt.Println("Forgot to specify a port")
+		return
+	}
 
-		// stlWriter := &STLWriter{}
-		// err := stlWriter.writeModel(geometry)
+	// If running in web server mode, setup the routes and start the server
+	router := mux.NewRouter()
+	router.HandleFunc("/gear/{hash}/{format}", GetAsset).Methods("GET")
 
-		daeWriter := &DAEWriter{fmt.Sprintf(ModelNamePrefix+"%d-auto.dae", index)}
-		err := daeWriter.writeModel(geometry)
+	fmt.Println(http.ListenAndServe(":"+port, router))
+}
+
+func executeCommand(hash uint, withSTL, withDAE, withGeom, withTextures bool) {
+	fmt.Printf("WithSTL: %v\n", withSTL)
+	fmt.Printf("WithDAE: %v\n", withDAE)
+
+	if hash == 0 {
+		fmt.Println("Forgot to provide an item hash!")
+		return
+	}
+
+	if withSTL == false && withDAE == false {
+		fmt.Println("No output format specified!")
+		return
+	}
+
+	assetDefinition, err := bungie.GetAssetDefinition(hash)
+	if err != nil {
+		fmt.Printf("Error requesting asset definition from the DB: %s\n", err.Error())
+		return
+	}
+
+	fmt.Printf("Ready to go with this item def: %+v\n", assetDefinition)
+
+	if withGeom {
+		processGeometry(assetDefinition, withSTL, withDAE)
+	}
+	if withTextures {
+		processTextures(assetDefinition)
+	}
+}
+
+func processGeometry(asset *bungie.GearAssetDefinition, withSTL, withDAE bool) string {
+
+	geometries := make([]*bungie.DestinyGeometry, 0, 12)
+	for _, geometryFile := range asset.Content[0].Geometry {
+
+		geometryPath := LocalGeometryBasePath + geometryFile
+
+		if _, err := os.Stat(geometryPath); os.IsNotExist(err) {
+			fmt.Println("Downloading geometry file... ", geometryFile)
+
+			client := http.Client{}
+			req, _ := http.NewRequest("GET", bungie.UrlPrefix+bungie.GeometryPrefix+geometryFile, nil)
+			req.Header.Set("X-API-Key", BungieApiKey)
+			response, _ := client.Do(req)
+
+			bodyBytes, _ := ioutil.ReadAll(response.Body)
+			ioutil.WriteFile(geometryPath, bodyBytes, 0644)
+		} else {
+			fmt.Println("Found cached geometry file...")
+		}
+
+		fmt.Println("Parsing geometry file... ")
+		geometry := parseGeometryFile(geometryPath)
+		geometries = append(geometries, geometry)
+	}
+
+	if withSTL {
+		fmt.Println("Writing STL model...")
+		path := fmt.Sprintf(ModelNamePrefix + "0-auto.stl")
+		stlWriter := &graphics.STLWriter{path}
+		err := stlWriter.WriteModels(geometries)
 		if err != nil {
-			fmt.Println("Error trying to write the model file!!: ", err.Error())
-			return
+			fmt.Println("Error trying to write the STL model file!!: ", err.Error())
+			return ""
+		}
+
+		return path
+	}
+
+	if withDAE {
+		fmt.Println("Writing DAE model...")
+		path := fmt.Sprintf(ModelNamePrefix + "0-auto.dae")
+		daeWriter := &graphics.DAEWriter{path}
+		err := daeWriter.WriteModels(geometries)
+		if err != nil {
+			fmt.Println("Error trying to write the DAE model file!!: ", err.Error())
+			return ""
+		}
+
+		return path
+	}
+
+	return ""
+}
+
+func processTextures(asset *bungie.GearAssetDefinition) {
+	for _, textureFile := range asset.Content[0].Textures {
+		texturePath := LocalTextureBasePath + textureFile
+		if _, err := os.Stat(texturePath); os.IsNotExist(err) {
+
+			fmt.Println("Downloading texture file... ", textureFile)
+
+			client := http.Client{}
+			req, _ := http.NewRequest("GET", bungie.UrlPrefix+bungie.TexturePrefix+textureFile, nil)
+			req.Header.Set("X-API-Key", BungieApiKey)
+			response, _ := client.Do(req)
+
+			bodyBytes, _ := ioutil.ReadAll(response.Body)
+			ioutil.WriteFile(LocalTextureBasePath+textureFile, bodyBytes, 0644)
+		} else {
+			fmt.Println("Found cached texture file...")
+		}
+
+		destinyTexture := parseTextureFile(texturePath)
+
+		fmt.Printf("Parsed texture: %+v\n", destinyTexture)
+
+		// Write all images to disk after parsing
+		for _, file := range destinyTexture.Files {
+
+			textureOutputPath := TexturePathPrefix + file.Name + file.Extension
+			if _, err := os.Stat(textureOutputPath); os.IsNotExist(err) {
+				ioutil.WriteFile(textureOutputPath, file.Data, 0644)
+			} else {
+				fmt.Println("Cached texture file found")
+			}
 		}
 	}
 }
 
-func parseGeometryFile(path string) *DestinyGeometry {
+func parseGeometryFile(path string) *bungie.DestinyGeometry {
 
 	f, err := os.Open(path)
 	if err != nil {
@@ -110,8 +219,8 @@ func parseGeometryFile(path string) *DestinyGeometry {
 	}
 	defer f.Close()
 
-	geom := &DestinyGeometry{}
-	geom.Files = make([]*GeometryFile, 0)
+	geom := &bungie.DestinyGeometry{}
+	geom.Files = make([]*bungie.GeometryFile, 0)
 
 	// Read file metadata
 	buf := make([]byte, 272)
@@ -136,7 +245,7 @@ func parseGeometryFile(path string) *DestinyGeometry {
 
 	// Read each of the individual files
 	for i := int32(0); i < geom.FileCount; i++ {
-		file := &GeometryFile{}
+		file := &bungie.GeometryFile{}
 
 		nameBuf := make([]byte, 256)
 		f.Read(nameBuf)
@@ -174,256 +283,95 @@ func parseGeometryFile(path string) *DestinyGeometry {
 	return geom
 }
 
-func (geom *DestinyGeometry) getFileByName(name string) *GeometryFile {
+func parseTextureFile(path string) *bungie.DestinyTexture {
 
-	for _, file := range geom.Files {
-		if file.Name == name {
-			return file
-		}
+	f, err := os.Open(path)
+	if err != nil {
+		fmt.Println("Failed to open geometry file with error: ", err.Error())
+		return nil
 	}
-	return nil
-}
+	defer f.Close()
 
-func parseVertex(data []byte, vertexType string, offset int, stride int) [][]float64 {
+	text := &bungie.DestinyTexture{}
+	text.Files = make([]*bungie.TextureFile, 0)
 
-	result := make([][]float64, 0, 10)
-	for i := offset; i < len(data); i += stride {
+	// Read file metadata
+	buf := make([]byte, 272)
+	f.Read(buf)
+	metaBuffer := bytes.NewBuffer(buf)
 
-		if vertexType == "_vertex_format_attribute_short4" {
-			out := make([]int16, 4)
-			binary.Read(bytes.NewBuffer(data[i:i+8]), binary.LittleEndian, out)
-			outFloats := []float64{float64(out[0]), float64(out[1]), float64(out[2]), float64(out[3])}
-			result = append(result, outFloats)
-		} else if vertexType == "_vertex_format_attribute_float4" {
-			out := make([]float32, 4)
-			binary.Read(bytes.NewBuffer(data[i:i+16]), binary.LittleEndian, out)
-			outFloats := []float64{float64(out[0]), float64(out[1]), float64(out[2]), float64(out[3])}
-			result = append(result, outFloats)
-		} else if vertexType == "_vertex_format_attribute_short2" {
-			out := make([]int16, 2)
-			binary.Read(bytes.NewBuffer(data[i:i+4]), binary.LittleEndian, out)
-			outFloats := []float64{float64(out[0]), float64(out[1])}
-			result = append(result, outFloats)
-		} else if vertexType == "_vertex_format_attribute_float2" {
-			out := make([]float32, 2)
-			binary.Read(bytes.NewBuffer(data[i:i+8]), binary.LittleEndian, out)
-			outFloats := []float64{float64(out[0]), float64(out[1])}
-			result = append(result, outFloats)
+	/** FORMAT:
+	** - Extension (4 bytes)
+	** - Version (4 bytes)
+	** - HeaderSize (4 bytes)
+	** - FileCount (4 bytes)
+	** - FileIdentifier (256 bytes)
+	** - N Files with the following format:
+	** -- Name (256 bytes)
+	** -- Offset (8 bytes)
+	** -- Size (8 bytes)
+	** -- Data ("Size" bytes)
+	** - FileData[FileCount] (n bytes)
+	**/
+	extension := make([]byte, 4)
+	binary.Read(metaBuffer, binary.LittleEndian, extension)
+
+	text.Extension = string(extension)
+
+	// Unknown
+	metaBuffer.Next(4)
+
+	binary.Read(metaBuffer, binary.LittleEndian, &text.HeaderSize)
+	binary.Read(metaBuffer, binary.LittleEndian, &text.FileCount)
+	nameBuf := make([]byte, 256)
+	binary.Read(metaBuffer, binary.LittleEndian, &nameBuf)
+
+	endOfName := bytes.IndexByte(nameBuf, 0)
+	text.Name = string(nameBuf[:endOfName])
+
+	// Read each of the individual files
+	for i := int32(0); i < text.FileCount; i++ {
+		file := &bungie.TextureFile{}
+
+		nameBuf := make([]byte, 256)
+		f.Read(nameBuf)
+		n := bytes.IndexByte(nameBuf, 0)
+
+		file.Name = string(nameBuf[:n])
+
+		startAddrBuf := make([]byte, 8)
+		f.Read(startAddrBuf)
+		binary.Read(bytes.NewBuffer(startAddrBuf), binary.LittleEndian, &file.Offset)
+
+		lengthBuffer := make([]byte, 8)
+		f.Read(lengthBuffer)
+		binary.Read(bytes.NewBuffer(lengthBuffer), binary.LittleEndian, &file.Size)
+
+		text.Files = append(text.Files, file)
+
+		//		fmt.Printf("Finished reading file metadata: %+v\n", file)
+	}
+
+	for _, file := range text.Files {
+		f.Seek(file.Offset, 0)
+
+		file.Data = make([]byte, file.Size)
+		f.Read(file.Data)
+
+		if file.Data[0] == 0x89 &&
+			file.Data[1] == 0x50 &&
+			file.Data[2] == 0x4E &&
+			file.Data[3] == 0x47 {
+			file.Extension = ".png"
+		} else if file.Data[0] == 0xFF &&
+			file.Data[1] == 0xD8 {
+			file.Extension = ".jpg"
 		} else {
-			fmt.Println("Found unknown vertex type!!")
+			fmt.Println("ERROR: Unknown texture image file format!")
 		}
 	}
-	return result
-}
 
-func parseVertex32(data []byte, vertexType string, offset int, stride int) [][]float32 {
+	// ioutil.WriteFile("./local_tools/"+ModelNamePrefix+"-meshes.json", geom.MeshesBytes, 0644)
 
-	result := make([][]float32, 0, 10)
-	for i := offset; i < len(data); i += stride {
-
-		if vertexType == "_vertex_format_attribute_short2" {
-			out := make([]int16, 2)
-			binary.Read(bytes.NewBuffer(data[i:i+4]), binary.LittleEndian, out)
-			outFloats := []float32{float32(out[0]), float32(out[1])}
-			result = append(result, outFloats)
-		} else if vertexType == "_vertex_format_attribute_float2" {
-			out := make([]float32, 2)
-			binary.Read(bytes.NewBuffer(data[i:i+8]), binary.LittleEndian, out)
-			outFloats := []float32{float32(out[0]), float32(out[1])}
-			result = append(result, outFloats)
-		} else {
-			fmt.Println("Found unknown vertex type!!")
-		}
-	}
-	return result
-}
-
-func (dae *DAEWriter) writeModel(geom *DestinyGeometry) error {
-
-	result := gjson.Parse(string(geom.MeshesBytes))
-
-	meshes := result.Get("render_model.render_meshes")
-	if meshes.Exists() == false {
-		err := errors.New("Error unmarshaling mesh JSON: render meshes not found")
-		return err
-	}
-
-	fmt.Printf("Successfully parsed meshes JSON\n")
-
-	positionVertices := make([]float64, 0, 1024)
-	texcoords := make([]float32, 0, 1024)
-	for meshIndex, meshInterface := range meshes.Array() {
-		if meshIndex != 1 {
-			//continue
-		}
-
-		mesh := meshInterface.Map()
-		positions := [][]float64{}
-		normals := [][]float64{}
-		innerTexcoords := [][]float32{}
-		adjustments := [][]float32{}
-		defVB := mesh["stage_part_vertex_stream_layout_definitions"].Array()[0].Map()["formats"].Array()
-
-		for index, vbInterface := range mesh["vertex_buffers"].Array() {
-			currentDefVB := defVB[index].Map()
-			vertexBuffers := vbInterface.Map()
-			stride := currentDefVB["stride"].Float()
-			if stride != vertexBuffers["stride_byte_size"].Float() {
-				return errors.New("Mismatched stride sizes found")
-			}
-
-			data := geom.getFileByName(vertexBuffers["file_name"].String()).Data
-			fmt.Println("Reading data from file: ", vertexBuffers["file_name"].String())
-			if data == nil {
-				return errors.New("Missing geometry file by name: " + vertexBuffers["file_name"].String())
-			}
-
-			for _, elementInterface := range currentDefVB["elements"].Array() {
-				element := elementInterface.Map()
-				elementType := element["type"].String()
-				elementOffset := element["offset"].Float()
-
-				switch element["semantic"].String() {
-				case "_tfx_vb_semantic_position":
-					positions = parseVertex(data, elementType, int(elementOffset), int(stride))
-					fmt.Printf("Found positions: %d\n", len(positions))
-				case "_tfx_vb_semantic_normal":
-					normals = parseVertex(data, elementType, int(elementOffset), int(stride))
-					fmt.Printf("Found normals: len=%d\n", len(normals))
-				case "_tfx_vb_semantic_texcoord":
-					if elementType != "_vertex_format_attribute_float2" {
-						innerTexcoords = parseVertex32(data, elementType, int(elementOffset), int(stride))
-						fmt.Printf("Found textcoords: len=%d\n", len(innerTexcoords))
-					} else {
-						adjustments = parseVertex32(data, elementType, int(elementOffset), int(stride))
-						fmt.Printf("Found adjustments: %d\n", len(adjustments))
-						//fmt.Printf("Found float texcoords: %+v\n", throwaway)
-					}
-				}
-			}
-		}
-
-		minS := [2]float32{0.0, 0.0}
-		minT := [2]float32{0.0, 0.0}
-		maxS := [2]float32{0.0, 0.0}
-		maxT := [2]float32{0.0, 0.0}
-
-		if len(positions) == 0 || len(normals) == 0 || len(positions) != len(normals) {
-			return errors.New("Positions slice is not the same size as the normals slice")
-		}
-
-		// Parse the index buffer
-		indexBuffer := make([]int16, 0)
-		indexBufferBytes := geom.getFileByName(mesh["index_buffer"].Get("file_name").String()).Data
-
-		for i := 0; i < len(indexBufferBytes); i += 2 {
-
-			var index int16
-			binary.Read(bytes.NewBuffer(indexBufferBytes[i:i+2]), binary.LittleEndian, &index)
-			indexBuffer = append(indexBuffer, index)
-		}
-
-		parts := mesh["stage_part_list"].Array()
-
-		// Loop through all the parts in the mesh
-		for i, partInterface := range parts {
-			part := partInterface.Map()
-			start := int(part["start_index"].Float())
-			count := int(part["index_count"].Float())
-
-			// Check if this part has been duplciated
-			ignore := false
-			for j := 0; j < i; j++ {
-				jStartIndex := parts[j].Map()["start_index"].Float()
-				jIndexCount := parts[j].Map()["index_count"].Float()
-				if (start == int(jStartIndex)) || (count == int(jIndexCount)) {
-					ignore = true
-					break
-				}
-			}
-
-			lodCategoryValue := int(part["lod_category"].Get("value").Float())
-			if (ignore == true) || (lodCategoryValue > 1) {
-				continue
-			}
-
-			// PrimitiveType, 3=TRIANGLES, 5=TRIANGLE_STRIP
-			// https://stackoverflow.com/questions/3485034/convert-triangle-strips-to-triangles
-
-			// Process indexBuffer in sets of 3
-			primitiveType := int(part["primitive_type"].Float())
-			increment := 3
-
-			if primitiveType == 5 {
-				// Process indexBuffer as triangle strip
-				increment = 1
-				count -= 2
-			} else if primitiveType != 3 {
-				fmt.Println("Unknown primitive type, skipping this part...")
-				continue
-			}
-
-			// Construct and write this mesh header
-			for j := 0; j < count; j += increment {
-
-				// Skip if any two of the indexBuffer match (ignoring lines or points)
-				if indexBuffer[start+j+0] == indexBuffer[start+j+1] || indexBuffer[start+j+0] == indexBuffer[start+j+2] || indexBuffer[start+j+1] == indexBuffer[start+j+2] {
-					continue
-				}
-
-				tri := [3]int{0, 1, 2}
-				if (primitiveType == 3) || ((j & 1) == 1) {
-					tri = [3]int{2, 1, 0}
-				}
-
-				for k := 0; k < 3; k++ {
-					v := [4]float64{}
-					for l := 0; l < 4; l++ {
-						v[l] = (positions[indexBuffer[start+j+tri[k]]][l] + OffsetConstant) * ScaleConstant
-					}
-
-					tex := [2]float32{}
-					//fmt.Printf("Normal indices: ")
-					for l := 0; l < 2; l++ {
-						offset := TexcoordOffset[l]
-						scale := TexcoordScale[l]
-						adjustment := float32(1.0)
-						if len(adjustments) > 0 {
-							adjustment = adjustments[indexBuffer[start+j+tri[k]]][l]
-						}
-						//adjustment = 1.0
-						//fmt.Printf("%d,", indexBuffer[start+j+tri[k]])
-						tex[l] = (((texcoordVal(innerTexcoords[indexBuffer[start+j+tri[k]]][l])).normalize(16) * scale * adjustment) + offset) + ManualOffsets[l]
-					}
-
-					if tex[0] < minS[0] {
-						minS = tex
-					}
-					if tex[1] < minT[1] {
-						minT = tex
-					}
-					if tex[0] > maxS[0] {
-						maxS = tex
-					}
-					if tex[1] > maxT[1] {
-						maxT = tex
-					}
-
-					//fmt.Println()
-					positionVertices = append(positionVertices, v[0], v[1], v[2])
-					texcoords = append(texcoords, tex[0], tex[1])
-				}
-			}
-		}
-
-		fmt.Printf("minS=%v, maxS=%v, minT=%v, maxT=%v\n", minS, maxS, minT, maxT)
-
-		// for _, buffer := range positions {
-		// 	positionVertices = append(positionVertices, buffer[0], buffer[1], buffer[2])
-		// }
-	}
-
-	dae.writeXML(positionVertices, texcoords)
-
-	return nil
+	return text
 }

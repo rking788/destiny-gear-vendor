@@ -1,4 +1,4 @@
-package main
+package graphics
 
 import (
 	"bufio"
@@ -8,14 +8,17 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/rking788/destiny-gear-vendor/bungie"
 	"github.com/tidwall/gjson"
 )
 
 type STLWriter struct {
+	Path string
 }
 
-func (stl *STLWriter) writeModel(geom *DestinyGeometry) error {
+func (stl *STLWriter) WriteModels(geoms []*bungie.DestinyGeometry) error {
 
+	geom := geoms[0]
 	result := gjson.Parse(string(geom.MeshesBytes))
 
 	meshes := result.Get("render_model.render_meshes")
@@ -40,7 +43,7 @@ func (stl *STLWriter) writeModel(geom *DestinyGeometry) error {
 				return errors.New("Mismatched stride sizes found")
 			}
 
-			data := geom.getFileByName(vertexBuffers["file_name"].String()).Data
+			data := geom.GetFileByName(vertexBuffers["file_name"].String()).Data
 			if data == nil {
 				return errors.New("Missing geometry file by name: " + vertexBuffers["file_name"].String())
 			}
@@ -65,7 +68,7 @@ func (stl *STLWriter) writeModel(geom *DestinyGeometry) error {
 
 		// Parse the index buffer
 		indexBuffer := make([]int16, 0)
-		indexBufferBytes := geom.getFileByName(mesh["index_buffer"].Get("file_name").String()).Data
+		indexBufferBytes := geom.GetFileByName(mesh["index_buffer"].Get("file_name").String()).Data
 
 		for i := 0; i < len(indexBufferBytes); i += 2 {
 
@@ -120,7 +123,7 @@ func (stl *STLWriter) writeModel(geom *DestinyGeometry) error {
 			meshName := fmt.Sprintf("%s_%d_%d", geom.Name, meshIndex, i)
 
 			// TODO: This should check if the file exists and remove it first probably
-			f, err := os.OpenFile("lastword.stl", os.O_RDWR|os.O_CREATE, 0644)
+			f, err := os.OpenFile(stl.Path, os.O_RDWR|os.O_CREATE, 0644)
 			if err != nil {
 				return err
 			}
@@ -151,7 +154,7 @@ func (stl *STLWriter) writeModel(geom *DestinyGeometry) error {
 					for k := 2; k >= 0; k-- {
 						v := [4]float64{}
 						for l := 0; l < 4; l++ {
-							v[l] = (positions[indexBuffer[start+j+k]][l] + OffsetConstant) * ScaleConstant
+							v[l] = (positions[indexBuffer[start+j+k]][l] + offsetConstant) * scaleConstant
 						}
 
 						bufferedWriter.Write([]byte(fmt.Sprintf("    vertex %.9f %.9f %.9f\n", v[0], v[1], v[2])))
@@ -161,7 +164,7 @@ func (stl *STLWriter) writeModel(geom *DestinyGeometry) error {
 					for k := 0; k < 3; k++ {
 						v := [4]float64{}
 						for l := 0; l < 4; l++ {
-							v[l] = (positions[indexBuffer[start+j+k]][l] + OffsetConstant) * ScaleConstant
+							v[l] = (positions[indexBuffer[start+j+k]][l] + offsetConstant) * scaleConstant
 						}
 
 						bufferedWriter.Write([]byte(fmt.Sprintf("    vertex %.9f %.9f %.9f\n", v[0], v[1], v[2])))

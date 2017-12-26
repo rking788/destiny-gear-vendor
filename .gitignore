@@ -1,5 +1,7 @@
 local_tools
 working
-destiny-dae-transformer
+destiny-gear-vendor
+*.stl
 *.dae
 .DS_Store
+output
