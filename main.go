@@ -29,7 +29,7 @@ import (
 **/
 
 const (
-	ModelPathPrefix       = "./output/"
+	ModelPathPrefix       = "./output/gear.scnassets/"
 	ModelNamePrefix       = ModelPathPrefix + "better-devils"
 	TexturePathPrefix     = "./output/"
 	LocalGeometryBasePath = "./local_tools/geom/geometry/"
@@ -64,6 +64,7 @@ func main() {
 		" as a CLI program and should print the path to the expected output when done instead"+
 		" of running a web server")
 	itemHash := flag.Uint("hash", 0, "The item hash from the manifest DB for the asset to use")
+	withAllAssets := flag.Bool("all", false, "Use this flag to request that all assets from the manifest be processed")
 	withSTL := flag.Bool("stl", false, "Use this to request STL format assets")
 	withDAE := flag.Bool("dae", false, "Use this flag to request DAE format assets")
 	withGeom := flag.Bool("geom", false, "Indicates that geometries should be parsed and written")
@@ -73,7 +74,7 @@ func main() {
 	fmt.Printf("IsCLI: %v\n", *isCLI)
 
 	if *isCLI {
-		executeCommand(*itemHash, *withSTL, *withDAE, *withGeom, *withTextures)
+		executeCommand(*itemHash, *withAllAssets, *withSTL, *withDAE, *withGeom, *withTextures)
 		return
 	}
 
@@ -85,16 +86,16 @@ func main() {
 
 	// If running in web server mode, setup the routes and start the server
 	router := mux.NewRouter()
-	router.HandleFunc("/gear/{hash}/{format}", GetAsset).Methods("GET")
+	router.HandleFunc("/gear-vendor/{hash}/{format}", GetAsset).Methods("GET")
 
 	fmt.Println(http.ListenAndServe(":"+port, router))
 }
 
-func executeCommand(hash uint, withSTL, withDAE, withGeom, withTextures bool) {
+func executeCommand(hash uint, withAllAssets, withSTL, withDAE, withGeom, withTextures bool) {
 	fmt.Printf("WithSTL: %v\n", withSTL)
 	fmt.Printf("WithDAE: %v\n", withDAE)
 
-	if hash == 0 {
+	if hash == 0 && withAllAssets == false {
 		fmt.Println("Forgot to provide an item hash!")
 		return
 	}
@@ -104,36 +105,79 @@ func executeCommand(hash uint, withSTL, withDAE, withGeom, withTextures bool) {
 		return
 	}
 
-	assetDefinition, err := bungie.GetAssetDefinition(hash)
-	if err != nil {
-		fmt.Printf("Error requesting asset definition from the DB: %s\n", err.Error())
-		return
+	var assetDefinitions []*bungie.GearAssetDefinition
+	if withAllAssets {
+		var err error
+		assetDefinitions, err = bungie.GetAllAssetDefinitions()
+		if err != nil {
+			fmt.Printf("Error requesting asset definitions for all items: %s\n", err.Error())
+			return
+		}
+	} else {
+		assetDefinition, err := bungie.GetAssetDefinition(hash)
+		if err != nil {
+			fmt.Printf("Error requesting asset definition from the DB: %s\n", err.Error())
+			return
+		}
+
+		assetDefinitions = []*bungie.GearAssetDefinition{assetDefinition}
 	}
 
-	fmt.Printf("Ready to go with this item def: %+v\n", assetDefinition)
+	// fmt.Printf("Ready to go with this item def: %+v\n", assetDefinition)
 
-	if withGeom {
-		processGeometry(assetDefinition, withSTL, withDAE)
+	for _, assetDefinition := range assetDefinitions {
+		fmt.Printf("Processing item with hash: %d\n", assetDefinition.ID)
+		if withGeom {
+			processGeometry(assetDefinition, withSTL, withDAE)
+		}
+		if withTextures {
+			processTextures(assetDefinition)
+		}
 	}
-	if withTextures {
-		processTextures(assetDefinition)
+}
+
+func fileExists(path string) bool {
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return false
+	} else {
+		return true
 	}
 }
 
 func processGeometry(asset *bungie.GearAssetDefinition, withSTL, withDAE bool) string {
 
+	stlOutputPath := fmt.Sprintf("%s/%d.stl", ModelPathPrefix, asset.ID)
+	daeOutputPath := fmt.Sprintf("%s/%d.dae", ModelPathPrefix, asset.ID)
+
+	if withDAE && fileExists(daeOutputPath) {
+		fmt.Println("Cached DAE model already exists")
+		return daeOutputPath
+	} else if withSTL && fileExists(stlOutputPath) {
+		fmt.Println("Cached STL model already exists")
+		return stlOutputPath
+	}
+
 	geometries := make([]*bungie.DestinyGeometry, 0, 12)
+	if len(asset.Content) < 1 {
+		fmt.Printf("*** ERROR *** No content found in the asset definition for id(%d) ****\n", asset.ID)
+		return ""
+	}
+
 	for _, geometryFile := range asset.Content[0].Geometry {
 
 		geometryPath := LocalGeometryBasePath + geometryFile
 
-		if _, err := os.Stat(geometryPath); os.IsNotExist(err) {
+		if !fileExists(geometryPath) {
 			fmt.Println("Downloading geometry file... ", geometryFile)
 
 			client := http.Client{}
 			req, _ := http.NewRequest("GET", bungie.UrlPrefix+bungie.GeometryPrefix+geometryFile, nil)
 			req.Header.Set("X-API-Key", BungieApiKey)
 			response, _ := client.Do(req)
+			if response.StatusCode != 200 {
+				fmt.Printf("Failed to download geometry for hash(%d), bad response received: %d\n", asset.ID, response.StatusCode)
+				return ""
+			}
 
 			bodyBytes, _ := ioutil.ReadAll(response.Body)
 			ioutil.WriteFile(geometryPath, bodyBytes, 0644)
@@ -146,26 +190,26 @@ func processGeometry(asset *bungie.GearAssetDefinition, withSTL, withDAE bool) s
 		geometries = append(geometries, geometry)
 	}
 
-	if withSTL {
-		fmt.Println("Writing STL model...")
-		path := fmt.Sprintf(ModelNamePrefix + "0-auto.stl")
-		stlWriter := &graphics.STLWriter{path}
-		err := stlWriter.WriteModels(geometries)
+	if withDAE {
+		fmt.Println("Writing DAE model...")
+		path := fmt.Sprintf("%s/%d.dae", ModelPathPrefix, asset.ID)
+		daeWriter := &graphics.DAEWriter{path}
+		err := daeWriter.WriteModels(geometries)
 		if err != nil {
-			fmt.Println("Error trying to write the STL model file!!: ", err.Error())
+			fmt.Println("Error trying to write the DAE model file!!: ", err.Error())
 			return ""
 		}
 
 		return path
 	}
 
-	if withDAE {
-		fmt.Println("Writing DAE model...")
-		path := fmt.Sprintf(ModelNamePrefix + "0-auto.dae")
-		daeWriter := &graphics.DAEWriter{path}
-		err := daeWriter.WriteModels(geometries)
+	if withSTL {
+		fmt.Println("Writing STL model...")
+		path := fmt.Sprintf("%s/%d.stl", ModelPathPrefix, asset.ID)
+		stlWriter := &graphics.STLWriter{path}
+		err := stlWriter.WriteModels(geometries)
 		if err != nil {
-			fmt.Println("Error trying to write the DAE model file!!: ", err.Error())
+			fmt.Println("Error trying to write the STL model file!!: ", err.Error())
 			return ""
 		}
 

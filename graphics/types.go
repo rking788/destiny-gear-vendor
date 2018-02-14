@@ -9,9 +9,6 @@ import (
 
 const (
 	includeTextures = true
-
-	offsetConstant = 0.0
-	scaleConstant  = 1000.0
 )
 
 var (

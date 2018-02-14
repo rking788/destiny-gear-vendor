@@ -154,7 +154,7 @@ func (stl *STLWriter) WriteModels(geoms []*bungie.DestinyGeometry) error {
 					for k := 2; k >= 0; k-- {
 						v := [4]float64{}
 						for l := 0; l < 4; l++ {
-							v[l] = (positions[indexBuffer[start+j+k]][l] + offsetConstant) * scaleConstant
+							v[l] = positions[indexBuffer[start+j+k]][l]
 						}
 
 						bufferedWriter.Write([]byte(fmt.Sprintf("    vertex %.9f %.9f %.9f\n", v[0], v[1], v[2])))
@@ -164,7 +164,7 @@ func (stl *STLWriter) WriteModels(geoms []*bungie.DestinyGeometry) error {
 					for k := 0; k < 3; k++ {
 						v := [4]float64{}
 						for l := 0; l < 4; l++ {
-							v[l] = (positions[indexBuffer[start+j+k]][l] + offsetConstant) * scaleConstant
+							v[l] = positions[indexBuffer[start+j+k]][l]
 						}
 
 						bufferedWriter.Write([]byte(fmt.Sprintf("    vertex %.9f %.9f %.9f\n", v[0], v[1], v[2])))

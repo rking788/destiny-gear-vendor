@@ -59,3 +59,25 @@ func (db *AssetDB) GetAssetDefinition(id uint) (string, error) {
 
 	return json, nil
 }
+
+func (db *AssetDB) GetAllAssetDefinitions() ([]map[string]interface{}, error) {
+
+	result := make([]map[string]interface{}, 0, 200)
+	rows, err := db.Database.Query("SELECT id, json FROM assets")
+	if err != nil {
+		return result, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var json string
+		var id uint
+		rows.Scan(&id, &json)
+		entry := make(map[string]interface{})
+		entry["id"] = id
+		entry["definition"] = json
+		result = append(result, entry)
+	}
+
+	return result, nil
+}

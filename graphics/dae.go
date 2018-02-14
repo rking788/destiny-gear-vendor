@@ -18,7 +18,7 @@ type DAEWriter struct {
 	Path string
 }
 
-func (dae *DAEWriter) writeXML(positions []float64, texcoords []float32) error {
+func (dae *DAEWriter) writeXML(positions, normalValues []float64, texcoords []float32) error {
 
 	if len(positions) <= 0 {
 		return nil
@@ -31,8 +31,11 @@ func (dae *DAEWriter) writeXML(positions []float64, texcoords []float32) error {
 
 	for i, pos := range positions {
 		posWriter.WriteString(fmt.Sprintf("%f ", pos))
-		normalWriter.Write([]byte("0 "))
 		trianglesWriter.WriteString(fmt.Sprintf("%d ", i))
+	}
+
+	for _, norm := range normalValues {
+		normalWriter.WriteString(fmt.Sprintf("%f ", norm))
 	}
 
 	for _, coord := range texcoords {
@@ -189,9 +192,12 @@ func writeLibraryEffects(parent *etree.Element, materialEffectName string) {
 	blinnAmbient.CreateElement("color").CreateCharData("1 1 1 1")
 
 	blinnDiffuse := blinn.CreateElement("diffuse")
-	diffuseTexture := blinnDiffuse.CreateElement("texture")
-	diffuseTexture.CreateAttr("texture", "ID2_image1")
-	diffuseTexture.CreateAttr("texcoord", "CHANNEL2")
+
+	blinnDiffuse.CreateElement("color").CreateCharData("1 0.7 0.5 1")
+
+	// diffuseTexture := blinnDiffuse.CreateElement("texture")
+	// diffuseTexture.CreateAttr("texture", "ID2_image1")
+	// diffuseTexture.CreateAttr("texcoord", "CHANNEL2")
 
 	blinnSpecular := blinn.CreateElement("specular")
 	blinnSpecular.CreateElement("color").CreateCharData("0.496564 0.496564 0.496564 1")
@@ -374,6 +380,7 @@ func writeSceneElement(parent *etree.Element, name string) {
 func (dae *DAEWriter) WriteModels(geoms []*bungie.DestinyGeometry) error {
 
 	positionVertices := make([]float64, 0, 10240)
+	normalValues := make([]float64, 0, 10240)
 	texcoords := make([]float32, 0, 10240)
 
 	for _, geom := range geoms {
@@ -513,8 +520,32 @@ func (dae *DAEWriter) WriteModels(geoms []*bungie.DestinyGeometry) error {
 
 					for k := 0; k < 3; k++ {
 						v := [4]float64{}
+						n := [4]float64{}
 						for l := 0; l < 4; l++ {
-							v[l] = (positions[indexBuffer[start+j+tri[k]]][l] + offsetConstant) * scaleConstant
+							index := start + j + tri[k]
+							if index >= len(indexBuffer) {
+								// TODO: These should be converted to uint16 so the indices don't seem to be out of bounds
+								fmt.Printf("*** ERROR: Current Index is outside the bounds of the index buffer: Want=%d, Actual=%d\n", index, len(indexBuffer))
+								return errors.New("Current index outside bounds of indx buffer")
+								//continue
+							} else if uint(indexBuffer[index]) >= uint(len(positions)) {
+								// TODO: These should be converted to uint16 so the indices don't seem to be out of bounds
+								fmt.Printf("*** ERROR: Current index buffer value is outside the bounds of the positions array: Want=%d, Actual=%d\n", indexBuffer[index], len(positions))
+								return errors.New("Current index buffer value is outside the bounds of the positions array")
+								//continue
+							}
+
+							positionIndex := uint(indexBuffer[index])
+							if l >= len(positions[positionIndex]) {
+
+								// TODO: These should be converted to uint16 so the indices don't seem to be out of bounds
+								fmt.Println("*** ERROR: Triangle index is outside the bounds of the current position array.")
+								return errors.New("Current Triangle index outside teh bounds of the current position array")
+								//continue
+							}
+
+							v[l] = positions[positionIndex][l]
+							n[l] = normals[positionIndex][l]
 						}
 
 						tex := [2]float32{}
@@ -546,6 +577,7 @@ func (dae *DAEWriter) WriteModels(geoms []*bungie.DestinyGeometry) error {
 
 						//fmt.Println()
 						positionVertices = append(positionVertices, v[0], v[1], v[2])
+						normalValues = append(normalValues, n[0], n[1], n[2])
 						texcoords = append(texcoords, tex[0], tex[1])
 					}
 				}
@@ -559,7 +591,7 @@ func (dae *DAEWriter) WriteModels(geoms []*bungie.DestinyGeometry) error {
 		}
 	}
 
-	dae.writeXML(positionVertices, texcoords)
+	dae.writeXML(positionVertices, normalValues, texcoords)
 
 	return nil
 }

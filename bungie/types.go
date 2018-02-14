@@ -65,6 +65,7 @@ func (f *TextureFile) String() string {
 }
 
 type GearAssetDefinition struct {
+	ID      uint
 	Gear    []string       `json:"gear"`
 	Content []*GearContent `json:"content"`
 }
