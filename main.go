@@ -8,8 +8,11 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/gorilla/mux"
+	"github.com/kpango/glg"
 
 	"github.com/rking788/destiny-gear-vendor/bungie"
 	"github.com/rking788/destiny-gear-vendor/graphics"
@@ -30,7 +33,7 @@ import (
 
 const (
 	ModelPathPrefix       = "./output/gear.scnassets/"
-	ModelNamePrefix       = ModelPathPrefix + "better-devils"
+	ModelNamePrefix       = ModelPathPrefix
 	TexturePathPrefix     = "./output/"
 	LocalGeometryBasePath = "./local_tools/geom/geometry/"
 	LocalTextureBasePath  = "./local_tools/geom/textures/"
@@ -38,10 +41,6 @@ const (
 
 var (
 	BungieApiKey = os.Getenv("BUNGIE_API_KEY")
-
-	//LastWordGeometries = [5]string{"8458a82dec5290cdbc18fa568b94ff99.tgxm", "5bb9e8681f0423e7d89a1febe42457ec.tgxm", "cf97cbfcaae5736094c320b9e3378aa2.tgxm", "f878c2e86541fbf165747362eb3d54fc.tgxm", "4a00ec1e50813252fb0b1341adf1b675.tgxm"}
-
-	// SunshotGeometries = []string{"21b966d2b3e9338b49b5243ecbdcccca.tgxm", "57152585e9f5300a5475478c8ea1f448.tgxm", "60fc8d77e90b35adddf0a99a99facf35.tgxm", "ae800a88325ed4b9e7bc32c86182ae75.tgxm", "defdbb6dcbce8fcd85422f44e53bc4c2.tgxm"}
 
 	// Unused coord pair: [1.3330078125, 2.666015625]
 	/*"texcoord_offset": [
@@ -88,7 +87,7 @@ func main() {
 	router := mux.NewRouter()
 	router.HandleFunc("/gear-vendor/{hash}/{format}", GetAsset).Methods("GET")
 
-	fmt.Println(http.ListenAndServe(":"+port, router))
+	glg.Error(http.ListenAndServe(":"+port, router))
 }
 
 func executeCommand(hash uint, withAllAssets, withSTL, withDAE, withGeom, withTextures bool) {
@@ -96,12 +95,12 @@ func executeCommand(hash uint, withAllAssets, withSTL, withDAE, withGeom, withTe
 	fmt.Printf("WithDAE: %v\n", withDAE)
 
 	if hash == 0 && withAllAssets == false {
-		fmt.Println("Forgot to provide an item hash!")
+		glg.Error("Forgot to provide an item hash!")
 		return
 	}
 
 	if withSTL == false && withDAE == false {
-		fmt.Println("No output format specified!")
+		glg.Error("No output format specified!")
 		return
 	}
 
@@ -110,23 +109,21 @@ func executeCommand(hash uint, withAllAssets, withSTL, withDAE, withGeom, withTe
 		var err error
 		assetDefinitions, err = bungie.GetAllAssetDefinitions()
 		if err != nil {
-			fmt.Printf("Error requesting asset definitions for all items: %s\n", err.Error())
+			glg.Errorf("Error requesting asset definitions for all items: %s", err.Error())
 			return
 		}
 	} else {
 		assetDefinition, err := bungie.GetAssetDefinition(hash)
 		if err != nil {
-			fmt.Printf("Error requesting asset definition from the DB: %s\n", err.Error())
+			glg.Errorf("Error requesting asset definition from the DB: %s", err.Error())
 			return
 		}
 
 		assetDefinitions = []*bungie.GearAssetDefinition{assetDefinition}
 	}
 
-	// fmt.Printf("Ready to go with this item def: %+v\n", assetDefinition)
-
 	for _, assetDefinition := range assetDefinitions {
-		fmt.Printf("Processing item with hash: %d\n", assetDefinition.ID)
+		glg.Infof("Processing item with hash: %d", assetDefinition.ID)
 		if withGeom {
 			processGeometry(assetDefinition, withSTL, withDAE)
 		}
@@ -139,9 +136,9 @@ func executeCommand(hash uint, withAllAssets, withSTL, withDAE, withGeom, withTe
 func fileExists(path string) bool {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return false
-	} else {
-		return true
 	}
+
+	return true
 }
 
 func processGeometry(asset *bungie.GearAssetDefinition, withSTL, withDAE bool) string {
@@ -150,53 +147,53 @@ func processGeometry(asset *bungie.GearAssetDefinition, withSTL, withDAE bool) s
 	daeOutputPath := fmt.Sprintf("%s/%d.dae", ModelPathPrefix, asset.ID)
 
 	if withDAE && fileExists(daeOutputPath) {
-		fmt.Println("Cached DAE model already exists")
+		glg.Infof(fmt.Sprintf("Cached DAE model already exists: %s", daeOutputPath))
 		return daeOutputPath
 	} else if withSTL && fileExists(stlOutputPath) {
-		fmt.Println("Cached STL model already exists")
+		glg.Infof(fmt.Sprintf("Cached STL model already exists: %s", stlOutputPath))
 		return stlOutputPath
 	}
 
 	geometries := make([]*bungie.DestinyGeometry, 0, 12)
 	if len(asset.Content) < 1 {
-		fmt.Printf("*** ERROR *** No content found in the asset definition for id(%d) ****\n", asset.ID)
+		glg.Errorf("*** ERROR *** No content in the asset definition for id(%d) ****\n", asset.ID)
 		return ""
 	}
 
-	for _, geometryFile := range asset.Content[0].Geometry {
+	for geomIndex, geometryFile := range asset.Content[0].Geometry {
 
 		geometryPath := LocalGeometryBasePath + geometryFile
 
 		if !fileExists(geometryPath) {
-			fmt.Println("Downloading geometry file... ", geometryFile)
+			glg.Info("Downloading geometry file... ")
 
 			client := http.Client{}
 			req, _ := http.NewRequest("GET", bungie.UrlPrefix+bungie.GeometryPrefix+geometryFile, nil)
 			req.Header.Set("X-API-Key", BungieApiKey)
 			response, _ := client.Do(req)
 			if response.StatusCode != 200 {
-				fmt.Printf("Failed to download geometry for hash(%d), bad response received: %d\n", asset.ID, response.StatusCode)
+				glg.Errorf("Failed to download geometry for hash(%d), bad response: %d\n", asset.ID, response.StatusCode)
 				return ""
 			}
 
 			bodyBytes, _ := ioutil.ReadAll(response.Body)
 			ioutil.WriteFile(geometryPath, bodyBytes, 0644)
 		} else {
-			fmt.Println("Found cached geometry file...")
+			glg.Info("Found cached geometry file...")
 		}
 
-		fmt.Println("Parsing geometry file... ")
-		geometry := parseGeometryFile(geometryPath)
+		glg.Infof("Parsing geometry file... %s", geometryFile)
+		geometry := parseGeometryFile(asset, geomIndex, geometryPath)
 		geometries = append(geometries, geometry)
 	}
 
 	if withDAE {
-		fmt.Println("Writing DAE model...")
+		glg.Info("Writing DAE model...")
 		path := fmt.Sprintf("%s/%d.dae", ModelPathPrefix, asset.ID)
-		daeWriter := &graphics.DAEWriter{path}
+		daeWriter := &graphics.DAEWriter{Path: path}
 		err := daeWriter.WriteModels(geometries)
 		if err != nil {
-			fmt.Println("Error trying to write the DAE model file!!: ", err.Error())
+			glg.Errorf("Error trying to write the DAE model file!!: %s", err.Error())
 			return ""
 		}
 
@@ -204,12 +201,12 @@ func processGeometry(asset *bungie.GearAssetDefinition, withSTL, withDAE bool) s
 	}
 
 	if withSTL {
-		fmt.Println("Writing STL model...")
+		glg.Info("Writing STL model...")
 		path := fmt.Sprintf("%s/%d.stl", ModelPathPrefix, asset.ID)
-		stlWriter := &graphics.STLWriter{path}
+		stlWriter := &graphics.STLWriter{Path: path}
 		err := stlWriter.WriteModels(geometries)
 		if err != nil {
-			fmt.Println("Error trying to write the STL model file!!: ", err.Error())
+			glg.Errorf("Error trying to write the STL model file!!: %s", err.Error())
 			return ""
 		}
 
@@ -224,7 +221,7 @@ func processTextures(asset *bungie.GearAssetDefinition) {
 		texturePath := LocalTextureBasePath + textureFile
 		if _, err := os.Stat(texturePath); os.IsNotExist(err) {
 
-			fmt.Println("Downloading texture file... ", textureFile)
+			glg.Infof("Downloading texture file... %s", textureFile)
 
 			client := http.Client{}
 			req, _ := http.NewRequest("GET", bungie.UrlPrefix+bungie.TexturePrefix+textureFile, nil)
@@ -234,12 +231,12 @@ func processTextures(asset *bungie.GearAssetDefinition) {
 			bodyBytes, _ := ioutil.ReadAll(response.Body)
 			ioutil.WriteFile(LocalTextureBasePath+textureFile, bodyBytes, 0644)
 		} else {
-			fmt.Println("Found cached texture file...")
+			glg.Info("Found cached texture file...")
 		}
 
 		destinyTexture := parseTextureFile(texturePath)
 
-		fmt.Printf("Parsed texture: %+v\n", destinyTexture)
+		glg.Infof("Parsed texture: %+v", destinyTexture)
 
 		// Write all images to disk after parsing
 		for _, file := range destinyTexture.Files {
@@ -248,17 +245,17 @@ func processTextures(asset *bungie.GearAssetDefinition) {
 			if _, err := os.Stat(textureOutputPath); os.IsNotExist(err) {
 				ioutil.WriteFile(textureOutputPath, file.Data, 0644)
 			} else {
-				fmt.Println("Cached texture file found")
+				glg.Info("Cached texture file found")
 			}
 		}
 	}
 }
 
-func parseGeometryFile(path string) *bungie.DestinyGeometry {
+func parseGeometryFile(asset *bungie.GearAssetDefinition, index int, path string) *bungie.DestinyGeometry {
 
 	f, err := os.Open(path)
 	if err != nil {
-		fmt.Println("Failed to open geometry file with error: ", err.Error())
+		glg.Errorf("Failed to open geometry file with error: %s", err.Error())
 		return nil
 	}
 	defer f.Close()
@@ -307,7 +304,7 @@ func parseGeometryFile(path string) *bungie.DestinyGeometry {
 
 		geom.Files = append(geom.Files, file)
 
-		fmt.Printf("Finished reading file metadata: %+v\n", file)
+		glg.Debugf("Finished reading file metadata: %+v", file)
 	}
 
 	for _, file := range geom.Files {
@@ -317,12 +314,17 @@ func parseGeometryFile(path string) *bungie.DestinyGeometry {
 		f.Read(file.Data)
 
 		if file.Name == "render_metadata.js" {
-			fmt.Println("Found render_metadata.js file!!")
+			glg.Debugf("Found render_metadata.js file!!")
 			geom.MeshesBytes = file.Data
 		}
 	}
 
-	ioutil.WriteFile("./local_tools/"+ModelNamePrefix+"-meshes.json", geom.MeshesBytes, 0644)
+	safeGeomName := strings.Replace(filepath.Base(path), ".", "", -1)
+	err = ioutil.WriteFile(fmt.Sprintf("./local_tools/%d-%d-%s-meshes.json",
+		asset.ID, index, safeGeomName), geom.MeshesBytes, 0644)
+	if err != nil {
+		glg.Errorf("Failed to write render meshes: %s", err.Error())
+	}
 
 	return geom
 }
@@ -331,7 +333,7 @@ func parseTextureFile(path string) *bungie.DestinyTexture {
 
 	f, err := os.Open(path)
 	if err != nil {
-		fmt.Println("Failed to open geometry file with error: ", err.Error())
+		glg.Errorf("Failed to open geometry file with error: %s", err.Error())
 		return nil
 	}
 	defer f.Close()
@@ -393,7 +395,7 @@ func parseTextureFile(path string) *bungie.DestinyTexture {
 
 		text.Files = append(text.Files, file)
 
-		//		fmt.Printf("Finished reading file metadata: %+v\n", file)
+		fmt.Printf("Finished reading file metadata: %+v\n", file)
 	}
 
 	for _, file := range text.Files {
@@ -411,7 +413,7 @@ func parseTextureFile(path string) *bungie.DestinyTexture {
 			file.Data[1] == 0xD8 {
 			file.Extension = ".jpg"
 		} else {
-			fmt.Println("ERROR: Unknown texture image file format!")
+			glg.Error("Unknown texture image file format!")
 		}
 	}
 
