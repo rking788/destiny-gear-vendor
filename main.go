@@ -124,11 +124,11 @@ func executeCommand(hash uint, withAllAssets, withSTL, withDAE, withGeom, withTe
 
 	for _, assetDefinition := range assetDefinitions {
 		glg.Infof("Processing item with hash: %d", assetDefinition.ID)
-		if withGeom {
-			processGeometry(assetDefinition, withSTL, withDAE)
-		}
 		if withTextures {
 			processTextures(assetDefinition)
+		}
+		if withGeom {
+			processGeometry(assetDefinition, withSTL, withDAE)
 		}
 	}
 }
@@ -190,7 +190,7 @@ func processGeometry(asset *bungie.GearAssetDefinition, withSTL, withDAE bool) s
 	if withDAE {
 		glg.Info("Writing DAE model...")
 		path := fmt.Sprintf("%s/%d.dae", ModelPathPrefix, asset.ID)
-		daeWriter := &graphics.DAEWriter{Path: path}
+		daeWriter := &graphics.DAEWriter{Path: path, TexturePath: ModelPathPrefix}
 		err := daeWriter.WriteModels(geometries)
 		if err != nil {
 			glg.Errorf("Error trying to write the DAE model file!!: %s", err.Error())
@@ -395,7 +395,7 @@ func parseTextureFile(path string) *bungie.DestinyTexture {
 
 		text.Files = append(text.Files, file)
 
-		fmt.Printf("Finished reading file metadata: %+v\n", file)
+		glg.Debugf("Finished reading file metadata: %+v\n", file)
 	}
 
 	for _, file := range text.Files {

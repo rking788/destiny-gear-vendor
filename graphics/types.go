@@ -11,12 +11,6 @@ const (
 	includeTextures = true
 )
 
-var (
-	manualOffsets  = [2]float32{-0.0, -0.0}
-	texcoordOffset = [2]float32{0.401725, 0.400094}
-	texcoordScale  = [2]float32{0.396719, 0.396719}
-)
-
 type texcoordVal float32
 
 func (f texcoordVal) normalize(bitNum float32) float32 {

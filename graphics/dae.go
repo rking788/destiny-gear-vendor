@@ -5,6 +5,10 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"image"
+	"image/color"
+	"image/draw"
+	"image/jpeg"
 	"os"
 	"strings"
 	"time"
@@ -16,13 +20,56 @@ import (
 	"github.com/tidwall/gjson"
 )
 
-const (
-	textureFilename = "crimson-diffuse.jpg"
-)
-
 // A DAEWriter is responsible for writing the parsed object geometry to a Collada (.dae) file.
 type DAEWriter struct {
-	Path string
+	Path        string
+	TexturePath string
+}
+
+func (dae *DAEWriter) writeTextures(processed *processedOutput) error {
+
+	for _, plate := range processed.texturePlates {
+		if plate == nil {
+			continue
+		}
+
+		// Write this to a file now
+		filePath := dae.TexturePath + "/" + plate.name
+		glg.Infof("Writing texture file to: %s", filePath)
+		outF, err := os.OpenFile(filePath, os.O_WRONLY|os.O_CREATE, 0644)
+		if err != nil {
+			glg.Error(err)
+			return err
+		}
+
+		flipped := flipVertically(plate.data)
+
+		err = jpeg.Encode(outF, flipped, nil)
+		if err != nil {
+			glg.Error(err)
+			return err
+		}
+		outF.Close()
+	}
+
+	return nil
+}
+
+func flipVertically(img image.Image) image.Image {
+	dst := image.NewRGBA(img.Bounds())
+
+	origin := img.Bounds().Min
+	width := img.Bounds().Dx()
+	height := img.Bounds().Dy()
+
+	for x := origin.X; x < (origin.X + width); x++ {
+		for y := origin.Y; y < (origin.Y + height); y++ {
+			newY := height - y
+			dst.Set(x, newY, img.At(x, y))
+		}
+	}
+
+	return dst
 }
 
 func (dae *DAEWriter) writeXML(processed *processedOutput) error {
@@ -37,18 +84,16 @@ func (dae *DAEWriter) writeXML(processed *processedOutput) error {
 	doc, colladaRoot := NewColladaDoc()
 
 	writeAssetElement(colladaRoot)
-	writeImageLibraryElement(colladaRoot)
 
-	// TODO: These cannot be empty, need to add solid material data
-	materialID := "STL_material"
-	materialEffectName := "effect_STL_material"
-	writeLibraryMaterials(colladaRoot, materialID, materialEffectName)
+	writeLibraryImagesElement(colladaRoot, processed.texturePlates)
 
-	writeLibraryEffects(colladaRoot, materialEffectName)
+	writeLibraryEffects(colladaRoot, processed.texturePlates)
+
+	writeLibraryMaterials(colladaRoot, processed.texturePlates)
 
 	geometryIDs := writeLibraryGeometries(colladaRoot, processed)
 
-	writeLibraryVisualScenes(colladaRoot, geometryIDs)
+	writeLibraryVisualScenes(colladaRoot, geometryIDs, processed)
 
 	doc.Indent(2)
 	//doc.WriteTo(os.Stdout)
@@ -88,129 +133,156 @@ func writeAssetElement(parent *etree.Element) {
 	asset.CreateElement("up_axis").CreateCharData("Y_UP")
 }
 
-func writeImageLibraryElement(parent *etree.Element) {
+func writeLibraryImagesElement(parent *etree.Element, plates [10]*texturePlate) {
 
-	imgName := textureFilename
 	libImages := parent.CreateElement("library_images")
-	img1 := libImages.CreateElement("image")
-	img1.CreateAttr("id", "image1")
-	initFrom := img1.CreateElement("init_from")
-	initFrom.CreateCharData(fmt.Sprintf("./%s", imgName))
+
+	for i, plate := range plates {
+		if plate == nil {
+			continue
+		}
+		img := libImages.CreateElement("image")
+		libraryImagesID := fmt.Sprintf("image%d", i)
+		img.CreateAttr("id", libraryImagesID)
+		plate.libraryImagesID = libraryImagesID
+
+		initFrom := img.CreateElement("init_from")
+		initFrom.CreateCharData(fmt.Sprintf("./%s", plate.name))
+	}
 }
 
-func writeLibraryMaterials(parent *etree.Element, materialID, materialEffectName string) {
+func writeLibraryMaterials(parent *etree.Element, plates [10]*texturePlate) {
+
 	libraryMaterials := parent.CreateElement("library_materials")
 
-	material := libraryMaterials.CreateElement("material")
-	material.CreateAttr("id", materialID)
-	material.CreateAttr("name", materialID)
-	material.CreateElement("instance_effect").CreateAttr("url", fmt.Sprintf("#%s", materialEffectName))
+	for i, plate := range plates {
+		if plate == nil {
+			continue
+		}
 
-	texMaterial := libraryMaterials.CreateElement("material")
-	texMaterial.CreateAttr("id", "lambert1")
-	texMaterial.CreateAttr("name", "lambert1")
-	texMaterial.CreateElement("instance_effect").CreateAttr("url", fmt.Sprintf("#effect_lambert1"))
+		materialID := fmt.Sprintf("lambert%d", i)
+		plate.libraryMaterialID = materialID
+		texMaterial := libraryMaterials.CreateElement("material")
+		texMaterial.CreateAttr("id", materialID)
+		texMaterial.CreateAttr("name", materialID)
+		texMaterial.CreateElement("instance_effect").CreateAttr("url", fmt.Sprintf("#%s", plate.libraryEffectsID))
+	}
 }
 
-func writeLibraryEffects(parent *etree.Element, materialEffectName string) {
+func writeLibraryEffects(parent *etree.Element, plates [10]*texturePlate) {
 	libraryEffects := parent.CreateElement("library_effects")
 
-	effect := libraryEffects.CreateElement("effect")
-	effect.CreateAttr("id", materialEffectName)
+	// NOTE: I don't think this STL effect is used anymore, this was an effect for solid
+	// colors before texturing was enabled. Mabyet this should be used when textures
+	// are turned off?
 
-	profileCommon := effect.CreateElement("profile_COMMON")
-	technique := profileCommon.CreateElement("technique")
-	technique.CreateAttr("sid", "common")
+	// effect := libraryEffects.CreateElement("effect")
+	// effect.CreateAttr("id", materialEffectName)
 
-	phong := technique.CreateElement("phong")
-	ambient := phong.CreateElement("ambient")
-	ambient.CreateElement("color").CreateCharData("0 0 0 1")
+	// profileCommon := effect.CreateElement("profile_COMMON")
+	// technique := profileCommon.CreateElement("technique")
+	// technique.CreateAttr("sid", "common")
 
-	diffuse := phong.CreateElement("diffuse")
-	diffuse.CreateElement("color").CreateCharData("1 1 1 1")
+	// phong := technique.CreateElement("phong")
+	// ambient := phong.CreateElement("ambient")
+	// ambient.CreateElement("color").CreateCharData("0 0 0 1")
 
-	reflective := phong.CreateElement("reflective")
-	reflective.CreateElement("color").CreateCharData("0 0 0 1")
+	// diffuse := phong.CreateElement("diffuse")
+	// diffuse.CreateElement("color").CreateCharData("1 1 1 1")
 
-	transparent := phong.CreateElement("transparent")
-	transparent.CreateAttr("opaque", "A_ONE")
-	transparent.CreateElement("color").CreateCharData("1 1 1 1")
+	// reflective := phong.CreateElement("reflective")
+	// reflective.CreateElement("color").CreateCharData("0 0 0 1")
 
-	transparency := phong.CreateElement("transparency")
-	transparency.CreateElement("float").CreateCharData("1")
+	// transparent := phong.CreateElement("transparent")
+	// transparent.CreateAttr("opaque", "A_ONE")
+	// transparent.CreateElement("color").CreateCharData("1 1 1 1")
 
-	indexOfRefraction := phong.CreateElement("index_of_refraction")
-	indexOfRefraction.CreateElement("float").CreateCharData("1")
+	// transparency := phong.CreateElement("transparency")
+	// transparency.CreateElement("float").CreateCharData("1")
+
+	// indexOfRefraction := phong.CreateElement("index_of_refraction")
+	// indexOfRefraction.CreateElement("float").CreateCharData("1")
 
 	/**
 	 * Lambert1 effects
 	 **/
-	lambertEffect := libraryEffects.CreateElement("effect")
-	lambertEffect.CreateAttr("id", "effect_lambert1")
 
-	lambertProfileCommon := lambertEffect.CreateElement("profile_COMMON")
+	for i, plate := range plates {
+		if plate == nil {
+			continue
+		}
 
-	imgSurfNewParam := lambertProfileCommon.CreateElement("newparam")
-	imgSurfNewParam.CreateAttr("sid", "ID2_image1_surface")
+		lambertEffect := libraryEffects.CreateElement("effect")
+		libraryEffectID := fmt.Sprintf("effect_lambert%d", i)
+		lambertEffect.CreateAttr("id", libraryEffectID)
+		plate.libraryEffectsID = libraryEffectID
 
-	surface := imgSurfNewParam.CreateElement("surface")
-	surface.CreateAttr("type", "2D")
-	surface.CreateElement("init_from").CreateCharData("image1")
+		lambertProfileCommon := lambertEffect.CreateElement("profile_COMMON")
 
-	imageNewParam := lambertProfileCommon.CreateElement("newparam")
-	imageNewParam.CreateAttr("sid", "ID2_image1")
+		imageSurfaceSourceID := fmt.Sprintf("ID2_image%d_surface", i)
+		imgSurfNewParam := lambertProfileCommon.CreateElement("newparam")
+		imgSurfNewParam.CreateAttr("sid", imageSurfaceSourceID)
 
-	sampler2D := imageNewParam.CreateElement("sampler2D")
-	sampler2D.CreateElement("source").CreateCharData("ID2_image1_surface")
-	sampler2D.CreateElement("wrap_s").CreateCharData("WRAP")
-	sampler2D.CreateElement("wrap_t").CreateCharData("WRAP")
-	sampler2D.CreateElement("minfilter").CreateCharData("LINEAR")
-	sampler2D.CreateElement("magfilter").CreateCharData("LINEAR")
-	sampler2D.CreateElement("mipfilter").CreateCharData("LINEAR")
+		surface := imgSurfNewParam.CreateElement("surface")
+		surface.CreateAttr("type", "2D")
+		surface.CreateElement("init_from").CreateCharData(plate.libraryImagesID)
 
-	lambertTechnique := lambertProfileCommon.CreateElement("technique")
-	lambertTechnique.CreateAttr("sid", "common")
+		imageSID := fmt.Sprintf("ID2_image%d", i)
+		imageNewParam := lambertProfileCommon.CreateElement("newparam")
+		imageNewParam.CreateAttr("sid", imageSID)
 
-	blinn := lambertTechnique.CreateElement("blinn")
-	blinnAmbient := blinn.CreateElement("ambient")
-	blinnAmbient.CreateElement("color").CreateCharData("1 1 1 1")
+		sampler2D := imageNewParam.CreateElement("sampler2D")
+		sampler2D.CreateElement("source").CreateCharData(imageSurfaceSourceID)
+		sampler2D.CreateElement("wrap_s").CreateCharData("WRAP")
+		sampler2D.CreateElement("wrap_t").CreateCharData("WRAP")
+		sampler2D.CreateElement("minfilter").CreateCharData("LINEAR")
+		sampler2D.CreateElement("magfilter").CreateCharData("LINEAR")
+		sampler2D.CreateElement("mipfilter").CreateCharData("LINEAR")
 
-	blinnDiffuse := blinn.CreateElement("diffuse")
+		lambertTechnique := lambertProfileCommon.CreateElement("technique")
+		lambertTechnique.CreateAttr("sid", "common")
 
-	if includeTextures {
-		diffuseTexture := blinnDiffuse.CreateElement("texture")
-		diffuseTexture.CreateAttr("texture", "ID2_image1")
-		diffuseTexture.CreateAttr("texcoord", "CHANNEL2")
-	} else {
-		blinnDiffuse.CreateElement("color").CreateCharData("1 0.7 0.5 1")
+		blinn := lambertTechnique.CreateElement("blinn")
+		blinnAmbient := blinn.CreateElement("ambient")
+		blinnAmbient.CreateElement("color").CreateCharData("1 1 1 1")
+
+		blinnDiffuse := blinn.CreateElement("diffuse")
+
+		if includeTextures {
+			diffuseTexture := blinnDiffuse.CreateElement("texture")
+			diffuseTexture.CreateAttr("texture", imageSID)
+			diffuseTexture.CreateAttr("texcoord", "CHANNEL2")
+		} else {
+			blinnDiffuse.CreateElement("color").CreateCharData("1 0.7 0.5 1")
+		}
+		blinnSpecular := blinn.CreateElement("specular")
+		blinnSpecular.CreateElement("color").CreateCharData("0.496564 0.496564 0.496564 1")
+
+		blinnShininess := blinn.CreateElement("shininess")
+		blinnShininess.CreateElement("float").CreateCharData("0.022516")
+
+		blinnReflective := blinn.CreateElement("reflective")
+		blinnReflective.CreateElement("color").CreateCharData("0 0 0 1")
+
+		blinnTransparent := blinn.CreateElement("transparent")
+		blinnTransparent.CreateAttr("opaque", "A_ONE")
+		blinnTransparent.CreateElement("color").CreateCharData("0.998203 1 1 1")
+
+		blinnTransparency := blinn.CreateElement("transparency")
+		blinnTransparency.CreateElement("float").CreateCharData("1")
+
+		blinnIndexOfRefraction := blinn.CreateElement("index_of_refraction")
+		blinnIndexOfRefraction.CreateElement("float").CreateCharData("1")
+
+		lambertExtra := lambertEffect.CreateElement("extra")
+		lambertExtraTech := lambertExtra.CreateElement("technique")
+		lambertExtraTech.CreateElement("litPerPixel").CreateCharData("1")
+		lambertExtraTech.CreateElement("ambient_diffuse_lock").CreateCharData("1")
+
+		lambertExtraIntensities := lambertExtraTech.CreateElement("intensities")
+		emission := lambertExtraIntensities.CreateElement("emission")
+		emission.CreateElement("float").CreateCharData("0.5")
 	}
-	blinnSpecular := blinn.CreateElement("specular")
-	blinnSpecular.CreateElement("color").CreateCharData("0.496564 0.496564 0.496564 1")
-
-	blinnShininess := blinn.CreateElement("shininess")
-	blinnShininess.CreateElement("float").CreateCharData("0.022516")
-
-	blinnReflective := blinn.CreateElement("reflective")
-	blinnReflective.CreateElement("color").CreateCharData("0 0 0 1")
-
-	blinnTransparent := blinn.CreateElement("transparent")
-	blinnTransparent.CreateAttr("opaque", "A_ONE")
-	blinnTransparent.CreateElement("color").CreateCharData("0.998203 1 1 1")
-
-	blinnTransparency := blinn.CreateElement("transparency")
-	blinnTransparency.CreateElement("float").CreateCharData("1")
-
-	blinnIndexOfRefraction := blinn.CreateElement("index_of_refraction")
-	blinnIndexOfRefraction.CreateElement("float").CreateCharData("1")
-
-	lambertExtra := lambertEffect.CreateElement("extra")
-	lambertExtraTech := lambertExtra.CreateElement("technique")
-	lambertExtraTech.CreateElement("litPerPixel").CreateCharData("1")
-	lambertExtraTech.CreateElement("ambient_diffuse_lock").CreateCharData("1")
-
-	lambertExtraIntensities := lambertExtraTech.CreateElement("intensities")
-	emission := lambertExtraIntensities.CreateElement("emission")
-	emission.CreateElement("float").CreateCharData("0.5")
 }
 
 func writeLibraryGeometries(parent *etree.Element, processed *processedOutput) []string {
@@ -374,7 +446,7 @@ func writeLibraryGeometries(parent *etree.Element, processed *processedOutput) [
 		triangleCount := ((positionCount / 3) / 3)
 		triangles := mesh.CreateElement("triangles")
 		triangles.CreateAttr("count", fmt.Sprintf("%d", triangleCount))
-		triangles.CreateAttr("material", "geometryElement5")
+		triangles.CreateAttr("material", geometryID)
 
 		vertexInput := triangles.CreateElement("input")
 		vertexInput.CreateAttr("semantic", "VERTEX")
@@ -400,7 +472,7 @@ func writeLibraryGeometries(parent *etree.Element, processed *processedOutput) [
 	return geometryIDs
 }
 
-func writeLibraryVisualScenes(parent *etree.Element, geometryIDs []string) {
+func writeLibraryVisualScenes(parent *etree.Element, geometryIDs []string, processed *processedOutput) {
 
 	sceneID := 1
 	sceneName := fmt.Sprintf("scene%d", sceneID)
@@ -409,6 +481,8 @@ func writeLibraryVisualScenes(parent *etree.Element, geometryIDs []string) {
 	visualScene := libraryVisualScene.CreateElement("visual_scene")
 	visualScene.CreateAttr("id", sceneName)
 
+	glg.Warnf("Starting with %d geometry IDs", len(geometryIDs))
+	glg.Warnf("Starting with %+v plateIndices", processed.plateIndices)
 	for i, geomID := range geometryIDs {
 
 		nodeName := fmt.Sprintf("node-%s", geomID)
@@ -421,36 +495,70 @@ func writeLibraryVisualScenes(parent *etree.Element, geometryIDs []string) {
 		instanceGeom := node.CreateElement("instance_geometry")
 		instanceGeom.CreateAttr("url", fmt.Sprintf("#%s", geomID))
 
-		bindMaterial := instanceGeom.CreateElement("bind_material")
-		bindMatTechCommon := bindMaterial.CreateElement("technique_common")
-		instanceMat := bindMatTechCommon.CreateElement("instance_material")
-		instanceMat.CreateAttr("symbol", "geometryElement5")
-		instanceMat.CreateAttr("target", "#lambert1")
+		glg.Infof("GeomIndex: %d", i)
+		glg.Infof("GoemID: %s", geomID)
+		if i < len(processed.plateIndices) {
+			plateIndex := processed.plateIndices[i]
+			glg.Infof("Found plate index = %d", plateIndex)
+			if plateIndex != -1 && plateIndex < len(processed.texturePlates) {
+				bindMaterial := instanceGeom.CreateElement("bind_material")
+				bindMatTechCommon := bindMaterial.CreateElement("technique_common")
+				instanceMat := bindMatTechCommon.CreateElement("instance_material")
 
-		bindVertexInput := instanceMat.CreateElement("bind_vertex_input")
-		bindVertexInput.CreateAttr("semantic", "CHANNEL2")
-		bindVertexInput.CreateAttr("input_semantic", "TEXCOORD")
-		bindVertexInput.CreateAttr("input_set", "1")
+				texturePlate := processed.texturePlates[plateIndex]
+				glg.Infof("Found texture plate material = %s", texturePlate.libraryMaterialID)
+
+				instanceMat.CreateAttr("symbol", geomID)
+				instanceMat.CreateAttr("target", fmt.Sprintf("#%s", texturePlate.libraryMaterialID))
+
+				bindVertexInput := instanceMat.CreateElement("bind_vertex_input")
+				bindVertexInput.CreateAttr("semantic", "CHANNEL2")
+				bindVertexInput.CreateAttr("input_semantic", "TEXCOORD")
+				bindVertexInput.CreateAttr("input_set", "1")
+			}
+		}
 	}
 
 	scene := parent.CreateElement("scene")
 	scene.CreateElement("instance_visual_scene").CreateAttr("url", fmt.Sprintf("#%s", sceneName))
 }
 
+type texturePlate struct {
+	name string
+	size [2]int
+	data draw.Image
+
+	// IDs and other names written to the resulting COLLADA (.dae) file for referencing in other
+	// spots in the file
+	libraryImagesID   string
+	libraryEffectsID  string
+	libraryMaterialID string
+}
+
 type processedOutput struct {
 	// One slice of floats for each mesh (parts are all included in a single slice)
+	// first index is the geometry index, second is the position, normal, texcoord for that texture.
 	positionVertices [][]float64
 	normalValues     [][]float64
 	texcoords        [][]float32
+
+	// These indices map a texture plate index for a geometry to
+	// an entry in the texturePlates array
+	plateIndices  []int
+	texturePlates [10]*texturePlate
 }
 
 func (dae *DAEWriter) WriteModels(geoms []*bungie.DestinyGeometry) error {
 
+	geomCount := len(geoms)
 	processed := &processedOutput{
-		positionVertices: make([][]float64, 0, 10),
-		normalValues:     make([][]float64, 0, 10),
-		texcoords:        make([][]float32, 0, 10),
+		positionVertices: make([][]float64, 0, geomCount),
+		normalValues:     make([][]float64, 0, geomCount),
+		texcoords:        make([][]float32, 0, geomCount),
+		plateIndices:     make([]int, 0, geomCount),
 	}
+
+	glg.Infof("Starting with output struct: %+v", processed)
 
 	glg.Infof("Writing models for %d geometries", len(geoms))
 
@@ -462,7 +570,9 @@ func (dae *DAEWriter) WriteModels(geoms []*bungie.DestinyGeometry) error {
 		}
 	}
 
+	glg.Warnf("Positions count = %d;;;Plate indices count = %d", len(processed.positionVertices), len(processed.plateIndices))
 	dae.writeXML(processed)
+	dae.writeTextures(processed)
 
 	return nil
 }
@@ -470,10 +580,11 @@ func (dae *DAEWriter) WriteModels(geoms []*bungie.DestinyGeometry) error {
 func processGeometry(geom *bungie.DestinyGeometry, output *processedOutput) error {
 	result := gjson.Parse(string(geom.MeshesBytes))
 
+	startPosCount := len(output.positionVertices)
+	// Process render meshes
 	meshes := result.Get("render_model.render_meshes")
 	if meshes.Exists() == false {
-		err := errors.New("Error unmarshaling mesh JSON: render meshes not found")
-		return err
+		return errors.New("Error unmarshaling mesh JSON: render meshes not found")
 	}
 
 	glg.Info("Successfully parsed meshes JSON")
@@ -481,10 +592,7 @@ func processGeometry(geom *bungie.DestinyGeometry, output *processedOutput) erro
 	meshArray := meshes.Array()
 	glg.Infof("Found %d meshes", len(meshArray))
 
-	for meshIndex, meshInterface := range meshArray {
-		if meshIndex != 1 {
-			//continue
-		}
+	for _, meshInterface := range meshArray {
 
 		mesh := meshInterface.Map()
 
@@ -494,7 +602,104 @@ func processGeometry(geom *bungie.DestinyGeometry, output *processedOutput) erro
 		}
 	}
 
+	// Process textures
+	plates := result.Get("texture_plates")
+	if plates.Exists() == false {
+		return errors.New("Error unmarshaling render model JSON: texture plates not found")
+	}
+
+	glg.Info("Successfully parsed plates JSON")
+
+	platesArray := plates.Array()
+	glg.Infof("Found %d plates", len(platesArray))
+	if len(platesArray) > 1 {
+		panic("Found more than 1 texture plate in this render.json")
+	}
+
+	newGeomCount := len(output.positionVertices) - startPosCount
+	processTexturePlate(platesArray[0].Map(), newGeomCount, output)
+
+	glg.Infof("Position length : %d", len(output.positionVertices))
+	glg.Infof("Found plate indices : %+v", output.plateIndices)
+
 	return nil
+}
+
+func processTexturePlate(texturePlateJSON map[string]gjson.Result, newGeomElements int, output *processedOutput) error {
+
+	diffuseSet := texturePlateJSON["plate_set"].Get("diffuse")
+	plateIndex := int(diffuseSet.Get("plate_index").Int())
+	plateSizeTemp := diffuseSet.Get("plate_size").Array()
+	plateSize := [2]int{int(plateSizeTemp[0].Int()), int(plateSizeTemp[1].Int())}
+
+	texturePlacements := diffuseSet.Get("texture_placements").Array()
+
+	// if len(texturePlacements) <= 0 {
+	// 	glg.Info("Found 0 texutre placements for this geometry... skipping.")
+	// 	//output.plateIndices = append(output.plateIndices, -1)
+	// 	return nil
+	// }
+
+	for i := 0; i < newGeomElements; i++ {
+		// Use this texture plate for all newly added geometries
+		output.plateIndices = append(output.plateIndices, plateIndex)
+	}
+
+	sizeX := plateSize[0]
+	sizeY := plateSize[1]
+	posX := 0
+	posY := 0
+	textureTagName := fmt.Sprintf("blank-%d", plateIndex)
+	if len(texturePlacements) > 0 {
+		placement := texturePlacements[0]
+		sizeX = int(placement.Get("texture_size_x").Int())
+		sizeY = int(placement.Get("texture_size_y").Int())
+		posX = int(placement.Get("position_x").Int())
+		posY = int(placement.Get("position_y").Int())
+		textureTagName = placement.Get("texture_tag_name").String()
+	}
+
+	plate := output.texturePlates[plateIndex]
+	if plate == nil {
+
+		plate = &texturePlate{
+			name: textureTagName + ".jpg",
+			size: plateSize,
+			data: blackImageOfSize(plateSize),
+		}
+		output.texturePlates[plateIndex] = plate
+	}
+
+	// Copy this data into the destination image
+	textureImgPath := "./output/" + textureTagName + ".jpg"
+	inF, err := os.OpenFile(textureImgPath, os.O_RDONLY, 0644)
+	if err != nil {
+		glg.Error(err)
+		return err
+	}
+
+	img, format, err := image.Decode(inF)
+	if err != nil {
+		glg.Error(err)
+		return err
+	}
+
+	glg.Debugf("Successfully decoded image with format: %s", format)
+
+	dp := image.Point{posX, posY}
+	r := image.Rectangle{dp, dp.Add(image.Point{sizeX, sizeY})}
+	draw.Draw(plate.data, r, img, image.ZP, draw.Src)
+
+	return nil
+}
+
+func blackImageOfSize(size [2]int) draw.Image {
+	img := image.NewRGBA(image.Rect(0, 0, size[0], size[1]))
+	black := color.RGBA{0, 0, 0, 255}
+
+	draw.Draw(img, img.Bounds(), image.NewUniform(black), image.ZP, draw.Src)
+
+	return img
 }
 
 func processMesh(mesh map[string]gjson.Result, output *processedOutput, fileProvider func(string) *bungie.GeometryFile) error {
@@ -539,9 +744,10 @@ func processMesh(mesh map[string]gjson.Result, output *processedOutput, fileProv
 					glg.Debugf("Found textcoords: len=%d", len(innerTexcoordsVb))
 				} else {
 					adjustmentsVb = parseVertex32(data, elementType, int(elementOffset), int(stride))
-					glg.Debugf("Found adjustments: %d", len(adjustmentsVb))
-					//fmt.Printf("Found float texcoords: %+v\n", throwaway)
+					glg.Debugf("Found adjustments: len=%d", len(adjustmentsVb))
 				}
+			default:
+				glg.Warnf("Unhandled semantic: %s", element["semantic"].String())
 			}
 		}
 	}
@@ -586,13 +792,22 @@ func processMesh(mesh map[string]gjson.Result, output *processedOutput, fileProv
 			continue
 		}
 
-		processPart(part, i, indexBuffer, positionsVb, normalsVb, innerTexcoordsVb, adjustmentsVb, output)
+		texcoordOffsetsTemp := mesh["texcoord_offset"].Array()
+		texcoordScalesTemp := mesh["texcoord_scale"].Array()
+
+		texcoordOffsets := [2]float64{texcoordOffsetsTemp[0].Float(), texcoordOffsetsTemp[1].Float()}
+		texcoordScales := [2]float64{texcoordScalesTemp[0].Float(), texcoordScalesTemp[1].Float()}
+
+		glg.Debugf("Found texcoord offsets: %+v", texcoordOffsets)
+		glg.Debugf("Found texcoord scales: %+v", texcoordScales)
+
+		processPart(part, i, indexBuffer, positionsVb, normalsVb, innerTexcoordsVb, adjustmentsVb, texcoordOffsets, texcoordScales, output)
 	}
 
 	return nil
 }
 
-func processPart(part map[string]gjson.Result, partIndex int, indexBuffer []int16, positionsVb, normalsVb [][]float64, innerTexcoordsVb, adjustmentsVb [][]float32, output *processedOutput) error {
+func processPart(part map[string]gjson.Result, partIndex int, indexBuffer []int16, positionsVb, normalsVb [][]float64, innerTexcoordsVb, adjustmentsVb [][]float32, texcoordOffsets, texcoordScales [2]float64, output *processedOutput) error {
 
 	start := int(part["start_index"].Float())
 	count := int(part["index_count"].Float())
@@ -668,13 +883,9 @@ func processPart(part map[string]gjson.Result, partIndex int, indexBuffer []int1
 
 			for l := 0; l < 2; l++ {
 
-				adjustment := float32(1.0)
 				texcoordIndex := indexBuffer[start+j+tri[k]]
-				if len(adjustmentsVb) > 0 {
-					adjustment = adjustmentsVb[texcoordIndex][l]
-				}
 
-				tex[l] = transformTexcoord(innerTexcoordsVb[texcoordIndex], l, adjustment)
+				tex[l] = transformTexcoord(innerTexcoordsVb[texcoordIndex], l, texcoordOffsets[l], texcoordScales[l])
 			}
 
 			// Positions, Normals, Texture coordinates for the processed "part"
@@ -684,6 +895,7 @@ func processPart(part map[string]gjson.Result, partIndex int, indexBuffer []int1
 		}
 	}
 
+	glg.Warnf("Appending position vertices")
 	output.positionVertices = append(output.positionVertices, pos)
 	output.normalValues = append(output.normalValues, norm)
 	output.texcoords = append(output.texcoords, texcoords)
@@ -691,10 +903,9 @@ func processPart(part map[string]gjson.Result, partIndex int, indexBuffer []int1
 	return nil
 }
 
-func transformTexcoord(coords []float32, index int, adjustment float32) float32 {
-	offset := texcoordOffset[index]
-	scale := texcoordScale[index]
+func transformTexcoord(coords []float32, index int, offset, scale float64) float32 {
 
-	return (((texcoordVal(coords[index])).normalize(16) * scale * adjustment) + offset) + manualOffsets[index]
-	//return ((float32(texcoordVal(coords[index])) * scale) + offset)
+	//glg.Debugf("Using coord(%f) offset(%f) and scale(%f)",
+	//	texcoordVal(coords[index]).normalize(16), offset, scale)
+	return ((texcoordVal(coords[index]).normalize(16) * float32(scale)) + float32(offset))
 }
