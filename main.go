@@ -187,10 +187,17 @@ func processGeometry(asset *bungie.GearAssetDefinition, withSTL, withDAE bool) s
 		geometries = append(geometries, geometry)
 	}
 
+	outDir := fmt.Sprintf("%s/%d", ModelPathPrefix, asset.ID)
+	if !fileExists(outDir) {
+		err := os.Mkdir(outDir, os.ModePerm)
+		if err != nil {
+			glg.Errorf("Error creating item subdirectory: %s", err.Error())
+		}
+	}
 	if withDAE {
 		glg.Info("Writing DAE model...")
-		path := fmt.Sprintf("%s/%d.dae", ModelPathPrefix, asset.ID)
-		daeWriter := &graphics.DAEWriter{Path: path, TexturePath: ModelPathPrefix}
+		path := fmt.Sprintf("%s/%d.dae", outDir, asset.ID)
+		daeWriter := &graphics.DAEWriter{Path: path, TexturePath: outDir}
 		err := daeWriter.WriteModels(geometries)
 		if err != nil {
 			glg.Errorf("Error trying to write the DAE model file!!: %s", err.Error())
@@ -202,7 +209,7 @@ func processGeometry(asset *bungie.GearAssetDefinition, withSTL, withDAE bool) s
 
 	if withSTL {
 		glg.Info("Writing STL model...")
-		path := fmt.Sprintf("%s/%d.stl", ModelPathPrefix, asset.ID)
+		path := fmt.Sprintf("%s/%d.stl", outDir, asset.ID)
 		stlWriter := &graphics.STLWriter{Path: path}
 		err := stlWriter.WriteModels(geometries)
 		if err != nil {
