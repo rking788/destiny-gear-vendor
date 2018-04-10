@@ -224,6 +224,10 @@ func processGeometry(asset *bungie.GearAssetDefinition, withSTL, withDAE bool) s
 }
 
 func processTextures(asset *bungie.GearAssetDefinition) {
+	if len(asset.Content) <= 0 {
+	    return
+	}
+
 	for _, textureFile := range asset.Content[0].Textures {
 		texturePath := LocalTextureBasePath + textureFile
 		if _, err := os.Stat(texturePath); os.IsNotExist(err) {
@@ -234,6 +238,10 @@ func processTextures(asset *bungie.GearAssetDefinition) {
 			req, _ := http.NewRequest("GET", bungie.UrlPrefix+bungie.TexturePrefix+textureFile, nil)
 			req.Header.Set("X-API-Key", BungieApiKey)
 			response, _ := client.Do(req)
+
+			if response.StatusCode != 200 {
+				continue
+			}
 
 			bodyBytes, _ := ioutil.ReadAll(response.Body)
 			ioutil.WriteFile(LocalTextureBasePath+textureFile, bodyBytes, 0644)
@@ -380,6 +388,10 @@ func parseTextureFile(path string) *bungie.DestinyTexture {
 	binary.Read(metaBuffer, binary.LittleEndian, &nameBuf)
 
 	endOfName := bytes.IndexByte(nameBuf, 0)
+	if endOfName == -1 {
+	    glg.Warnf("Failed to find the null byte in filename: %s", string(nameBuf))
+	    endOfName = len(nameBuf)
+	}
 	text.Name = string(nameBuf[:endOfName])
 
 	// Read each of the individual files

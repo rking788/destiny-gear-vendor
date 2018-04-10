@@ -614,6 +614,9 @@ func processGeometry(geom *bungie.DestinyGeometry, output *processedOutput) erro
 	glg.Infof("Found %d plates", len(platesArray))
 	if len(platesArray) > 1 {
 		panic("Found more than 1 texture plate in this render.json")
+	} else if len(platesArray) <= 0 {
+		glg.Warnf("Found 0 plates in this render file")
+		return nil
 	}
 
 	newGeomCount := len(output.positionVertices) - startPosCount
