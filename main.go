@@ -225,7 +225,7 @@ func processGeometry(asset *bungie.GearAssetDefinition, withSTL, withDAE bool) s
 
 func processTextures(asset *bungie.GearAssetDefinition) {
 	if len(asset.Content) <= 0 {
-	    return
+		return
 	}
 
 	for _, textureFile := range asset.Content[0].Textures {
@@ -246,7 +246,7 @@ func processTextures(asset *bungie.GearAssetDefinition) {
 			bodyBytes, _ := ioutil.ReadAll(response.Body)
 			ioutil.WriteFile(LocalTextureBasePath+textureFile, bodyBytes, 0644)
 		} else {
-			glg.Info("Found cached texture file...")
+			glg.Infof("Found cached texture file... %s", textureFile)
 		}
 
 		destinyTexture := parseTextureFile(texturePath)
@@ -389,8 +389,8 @@ func parseTextureFile(path string) *bungie.DestinyTexture {
 
 	endOfName := bytes.IndexByte(nameBuf, 0)
 	if endOfName == -1 {
-	    glg.Warnf("Failed to find the null byte in filename: %s", string(nameBuf))
-	    endOfName = len(nameBuf)
+		glg.Warnf("Failed to find the null byte in filename: %s", string(nameBuf))
+		endOfName = len(nameBuf)
 	}
 	text.Name = string(nameBuf[:endOfName])
 

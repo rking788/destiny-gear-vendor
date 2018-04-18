@@ -147,7 +147,7 @@ func writeLibraryImagesElement(parent *etree.Element, plates [10]*texturePlate) 
 		plate.libraryImagesID = libraryImagesID
 
 		initFrom := img.CreateElement("init_from")
-		initFrom.CreateCharData(fmt.Sprintf("./%s", plate.name))
+		initFrom.CreateCharData(fmt.Sprintf("%s", plate.name))
 	}
 }
 
@@ -671,6 +671,11 @@ func processTexturePlate(texturePlateJSON map[string]gjson.Result, newGeomElemen
 			data: blackImageOfSize(plateSize),
 		}
 		output.texturePlates[plateIndex] = plate
+	}
+
+	if len(texturePlacements) <= 0 {
+		// No textures to plate, just leave it as a black image
+		return nil
 	}
 
 	// Copy this data into the destination image
