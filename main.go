@@ -64,6 +64,9 @@ func main() {
 		" of running a web server")
 	itemHash := flag.Uint("hash", 0, "The item hash from the manifest DB for the asset to use")
 	withAllAssets := flag.Bool("all", false, "Use this flag to request that all assets from the manifest be processed")
+	withWeapons := flag.Bool("weapons", false, "Generate models for all weapon assets in the DB")
+	withGhosts := flag.Bool("ghosts", false, "Generate models for all ghost assets in the DB")
+	withVehicles := flag.Bool("vehicles", false, "Generate models for all vehicle assets in the DB")
 	withSTL := flag.Bool("stl", false, "Use this to request STL format assets")
 	withDAE := flag.Bool("dae", false, "Use this flag to request DAE format assets")
 	withGeom := flag.Bool("geom", false, "Indicates that geometries should be parsed and written")
@@ -73,7 +76,7 @@ func main() {
 	fmt.Printf("IsCLI: %v\n", *isCLI)
 
 	if *isCLI {
-		executeCommand(*itemHash, *withAllAssets, *withSTL, *withDAE, *withGeom, *withTextures)
+		executeCommand(*itemHash, *withAllAssets, *withWeapons, *withGhosts, *withVehicles, *withSTL, *withDAE, *withGeom, *withTextures)
 		return
 	}
 
@@ -90,11 +93,11 @@ func main() {
 	glg.Error(http.ListenAndServe(":"+port, router))
 }
 
-func executeCommand(hash uint, withAllAssets, withSTL, withDAE, withGeom, withTextures bool) {
+func executeCommand(hash uint, withAllAssets, withWeapons, withGhosts, withVehicles, withSTL, withDAE, withGeom, withTextures bool) {
 	fmt.Printf("WithSTL: %v\n", withSTL)
 	fmt.Printf("WithDAE: %v\n", withDAE)
 
-	if hash == 0 && withAllAssets == false {
+	if hash == 0 && withAllAssets == false && withWeapons == false {
 		glg.Error("Forgot to provide an item hash!")
 		return
 	}
@@ -112,7 +115,7 @@ func executeCommand(hash uint, withAllAssets, withSTL, withDAE, withGeom, withTe
 			glg.Errorf("Error requesting asset definitions for all items: %s", err.Error())
 			return
 		}
-	} else {
+	} else if hash != 0 {
 		assetDefinition, err := bungie.GetAssetDefinition(hash)
 		if err != nil {
 			glg.Errorf("Error requesting asset definition from the DB: %s", err.Error())
@@ -120,6 +123,35 @@ func executeCommand(hash uint, withAllAssets, withSTL, withDAE, withGeom, withTe
 		}
 
 		assetDefinitions = []*bungie.GearAssetDefinition{assetDefinition}
+	} else {
+		assetDefinitions = make([]*bungie.GearAssetDefinition, 0, 20)
+
+		if withWeapons {
+			defs, err := bungie.GetWeaponAssetDefinitions()
+			if err != nil {
+				glg.Errorf("Error requesting weapon asset definitions: %s", err.Error())
+				return
+			}
+			assetDefinitions = append(assetDefinitions, defs...)
+		}
+
+		if withGhosts {
+			ghosts, err := bungie.GetGhostAssetDefinitions()
+			if err != nil {
+				glg.Errorf("Error requesting ghost asset definitions: %s", err.Error())
+				return
+			}
+			assetDefinitions = append(assetDefinitions, ghosts...)
+		}
+
+		if withVehicles {
+			vehicles, err := bungie.GetVehicleAssetDefinitions()
+			if err != nil {
+				glg.Errorf("Error requesting vehicle asset definitions: %s", err.Error())
+				return
+			}
+			assetDefinitions = append(assetDefinitions, vehicles...)
+		}
 	}
 
 	for _, assetDefinition := range assetDefinitions {

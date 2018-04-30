@@ -57,3 +57,87 @@ func GetAllAssetDefinitions() ([]*GearAssetDefinition, error) {
 
 	return result, nil
 }
+
+func GetWeaponAssetDefinitions() ([]*GearAssetDefinition, error) {
+	db, err := db.GetAssetDBConnection()
+	if err != nil {
+		return nil, err
+	}
+
+	definitions, err := db.GetWeaponAssetDefinitions()
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]*GearAssetDefinition, 0, len(definitions))
+	for _, row := range definitions {
+		assetDefinition := &GearAssetDefinition{}
+		assetDefinition.ID = row["id"].(uint)
+
+		decoder := json.NewDecoder(strings.NewReader(row["definition"].(string)))
+		err = decoder.Decode(assetDefinition)
+		if err != nil {
+			return nil, err
+		}
+
+		result = append(result, assetDefinition)
+	}
+
+	return result, nil
+}
+
+func GetGhostAssetDefinitions() ([]*GearAssetDefinition, error) {
+	db, err := db.GetAssetDBConnection()
+	if err != nil {
+		return nil, err
+	}
+
+	definitions, err := db.GetGhostDefinitions()
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]*GearAssetDefinition, 0, len(definitions))
+	for _, row := range definitions {
+		assetDefinition := &GearAssetDefinition{}
+		assetDefinition.ID = row["id"].(uint)
+
+		decoder := json.NewDecoder(strings.NewReader(row["definition"].(string)))
+		err = decoder.Decode(assetDefinition)
+		if err != nil {
+			return nil, err
+		}
+
+		result = append(result, assetDefinition)
+	}
+
+	return result, nil
+}
+
+func GetVehicleAssetDefinitions() ([]*GearAssetDefinition, error) {
+	db, err := db.GetAssetDBConnection()
+	if err != nil {
+		return nil, err
+	}
+
+	definitions, err := db.GetVehicleDefinitions()
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]*GearAssetDefinition, 0, len(definitions))
+	for _, row := range definitions {
+		assetDefinition := &GearAssetDefinition{}
+		assetDefinition.ID = row["id"].(uint)
+
+		decoder := json.NewDecoder(strings.NewReader(row["definition"].(string)))
+		err = decoder.Decode(assetDefinition)
+		if err != nil {
+			return nil, err
+		}
+
+		result = append(result, assetDefinition)
+	}
+
+	return result, nil
+}

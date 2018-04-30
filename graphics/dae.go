@@ -379,7 +379,7 @@ func writeLibraryGeometries(parent *etree.Element, processed *processedOutput) [
 		yParam.CreateAttr("name", "Y")
 		yParam.CreateAttr("type", "float")
 		zParam := accessor.CreateElement("param")
-		zParam.CreateAttr("name", "Y")
+		zParam.CreateAttr("name", "Z")
 		zParam.CreateAttr("type", "float")
 
 		normalsSource := mesh.CreateElement("source")
@@ -483,14 +483,17 @@ func writeLibraryVisualScenes(parent *etree.Element, geometryIDs []string, proce
 
 	glg.Warnf("Starting with %d geometry IDs", len(geometryIDs))
 	glg.Warnf("Starting with %+v plateIndices", processed.plateIndices)
+
+	// It is important that all of the instance geometries are inside of the same node, that
+	// makes it much easier to import into a scene later on without having to import each
+	// ndoe/piece.
+	nodeName := fmt.Sprintf("node-%s", geometryIDs[0])
+
+	node := visualScene.CreateElement("node")
+	node.CreateAttr("id", "node0")
+	node.CreateAttr("name", nodeName)
+
 	for i, geomID := range geometryIDs {
-
-		nodeName := fmt.Sprintf("node-%s", geomID)
-		nodeID := i
-
-		node := visualScene.CreateElement("node")
-		node.CreateAttr("id", fmt.Sprintf("node%d", nodeID))
-		node.CreateAttr("name", nodeName)
 
 		instanceGeom := node.CreateElement("instance_geometry")
 		instanceGeom.CreateAttr("url", fmt.Sprintf("#%s", geomID))

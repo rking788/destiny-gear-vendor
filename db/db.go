@@ -6,6 +6,7 @@ import (
 
 	"database/sql"
 
+	"github.com/kpango/glg"
 	_ "github.com/lib/pq" // Only want to import the interface here
 )
 
@@ -79,5 +80,93 @@ func (db *AssetDB) GetAllAssetDefinitions() ([]map[string]interface{}, error) {
 		result = append(result, entry)
 	}
 
+	return result, nil
+}
+
+/**
+ * 1498876634	- kinetic
+ * 2465295065 	- energy
+ * 953998645 	- power
+ */
+func (db *AssetDB) GetWeaponAssetDefinitions() ([]map[string]interface{}, error) {
+
+	result := make([]map[string]interface{}, 0, 200)
+	rows, err := db.Database.Query("SELECT assets.id, assets.json FROM assets, items where " +
+		"assets.id = items.item_hash AND items.bucket_type_hash IN (953998645, 2465295065, " +
+		"1498876634)")
+
+	if err != nil {
+		return result, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var json string
+		var id uint
+		rows.Scan(&id, &json)
+		entry := make(map[string]interface{})
+		entry["id"] = id
+		entry["definition"] = json
+		result = append(result, entry)
+	}
+
+	glg.Debugf("Found %d weapon asset definitions", len(result))
+	return result, nil
+}
+
+/**
+ * 	Ghosts	- 4023194814
+ */
+func (db *AssetDB) GetGhostDefinitions() ([]map[string]interface{}, error) {
+
+	result := make([]map[string]interface{}, 0, 200)
+	rows, err := db.Database.Query("SELECT assets.id, assets.json FROM assets, items where " +
+		"assets.id = items.item_hash AND items.bucket_type_hash = 4023194814")
+
+	if err != nil {
+		return result, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var json string
+		var id uint
+		rows.Scan(&id, &json)
+		entry := make(map[string]interface{})
+		entry["id"] = id
+		entry["definition"] = json
+		result = append(result, entry)
+	}
+
+	glg.Debugf("Found %d ghost asset definitions", len(result))
+	return result, nil
+}
+
+/**
+ * 	Ships		- 284967655
+ *	Vehicles	- 2025709351
+ */
+func (db *AssetDB) GetVehicleDefinitions() ([]map[string]interface{}, error) {
+
+	result := make([]map[string]interface{}, 0, 200)
+	rows, err := db.Database.Query("SELECT assets.id, assets.json FROM assets, items where " +
+		"assets.id = items.item_hash AND items.bucket_type_hash IN (284967655, 2025709351)")
+
+	if err != nil {
+		return result, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var json string
+		var id uint
+		rows.Scan(&id, &json)
+		entry := make(map[string]interface{})
+		entry["id"] = id
+		entry["definition"] = json
+		result = append(result, entry)
+	}
+
+	glg.Debugf("Found %d vehicle asset definitions", len(result))
 	return result, nil
 }
