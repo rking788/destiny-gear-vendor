@@ -11,4 +11,7 @@ rm output/gear.scnassets/$hash/*.jpg
 #go build && ./destiny-gear-vendor --cli --geom --dae --hash $hash
 
 ## With Textures
-go build && ./destiny-gear-vendor --cli --geom --textures --dae --hash $hash
+#go build && ./destiny-gear-vendor --cli --geom --textures --dae --hash $hash
+
+## With Textures USD format
+go build && ./destiny-gear-vendor --cli --geom --textures --usd --hash $hash
