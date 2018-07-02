@@ -1,0 +1,20 @@
+<html>
+    <head>
+        <title>Destiny 2 Gear Gallery</title>
+        <link rel="stylesheet" type="text/css" href="screen.css">
+    </head>
+    <body>
+        <div class="rewards">
+        <!--<h2>Rewards</h2>-->
+            <div class="items">
+            {{- range .Items }}
+                <div class="item">
+                    <a rel="ar" href="{{.ModelName}}">
+                        <img class="item-icon" src="{{.ThumbnailURL}}"/>
+                    </a>
+                </div>
+            {{- end}}
+            </div>
+        </div>
+    </body>
+</html>

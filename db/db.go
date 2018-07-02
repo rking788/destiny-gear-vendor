@@ -170,3 +170,34 @@ func (db *AssetDB) GetVehicleDefinitions() ([]map[string]interface{}, error) {
 	glg.Debugf("Found %d vehicle asset definitions", len(result))
 	return result, nil
 }
+
+// Item contains the information needed to display a list of all items including
+// a URL to a thumbnail for that item
+type Item struct {
+	Hash string
+	Name string
+	Icon string
+	Tier int
+}
+
+// GetIconLookup will select all item entries including the hash, name, and icon to be
+// used to create a simple list of items and their thumbnails. The result is a map keyed by
+// the item hash.
+func (db *AssetDB) GetIconLookup() (map[string]*Item, error) {
+
+	result := make(map[string]*Item)
+	rows, err := db.Database.Query("SELECT item_hash, item_name, icon, tier_type FROM items")
+
+	if err != nil {
+		return nil, err
+	}
+
+	for rows.Next() {
+		item := &Item{}
+		rows.Scan(&item.Hash, &item.Name, &item.Icon, &item.Tier)
+
+		result[item.Hash] = item
+	}
+
+	return result, nil
+}
