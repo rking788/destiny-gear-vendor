@@ -69,6 +69,7 @@ func main() {
 	withVehicles := flag.Bool("vehicles", false, "Generate models for all vehicle assets in the DB")
 	withSTL := flag.Bool("stl", false, "Use this to request STL format assets")
 	withDAE := flag.Bool("dae", false, "Use this flag to request DAE format assets")
+	withUSD := flag.Bool("usd", false, "Write the model for the specified Destiny gear in USD format")
 	withGeom := flag.Bool("geom", false, "Indicates that geometries should be parsed and written")
 	withTextures := flag.Bool("textures", false, "Indicates that textures should be processed")
 	flag.Parse()
@@ -76,7 +77,7 @@ func main() {
 	fmt.Printf("IsCLI: %v\n", *isCLI)
 
 	if *isCLI {
-		executeCommand(*itemHash, *withAllAssets, *withWeapons, *withGhosts, *withVehicles, *withSTL, *withDAE, *withGeom, *withTextures)
+		executeCommand(*itemHash, *withAllAssets, *withWeapons, *withGhosts, *withVehicles, *withSTL, *withDAE, *withUSD, *withGeom, *withTextures)
 		return
 	}
 
@@ -93,16 +94,17 @@ func main() {
 	glg.Error(http.ListenAndServe(":"+port, router))
 }
 
-func executeCommand(hash uint, withAllAssets, withWeapons, withGhosts, withVehicles, withSTL, withDAE, withGeom, withTextures bool) {
+func executeCommand(hash uint, withAllAssets, withWeapons, withGhosts, withVehicles, withSTL, withDAE, withUSD, withGeom, withTextures bool) {
 	fmt.Printf("WithSTL: %v\n", withSTL)
 	fmt.Printf("WithDAE: %v\n", withDAE)
+	fmt.Printf("WithUSD: %v\n", withUSD)
 
 	if hash == 0 && withAllAssets == false && withWeapons == false {
 		glg.Error("Forgot to provide an item hash!")
 		return
 	}
 
-	if withSTL == false && withDAE == false {
+	if withSTL == false && withDAE == false && withUSD == false {
 		glg.Error("No output format specified!")
 		return
 	}
@@ -160,7 +162,7 @@ func executeCommand(hash uint, withAllAssets, withWeapons, withGhosts, withVehic
 			processTextures(assetDefinition)
 		}
 		if withGeom {
-			processGeometry(assetDefinition, withSTL, withDAE)
+			processGeometry(assetDefinition, withSTL, withDAE, withUSD)
 		}
 	}
 }
@@ -173,7 +175,7 @@ func fileExists(path string) bool {
 	return true
 }
 
-func processGeometry(asset *bungie.GearAssetDefinition, withSTL, withDAE bool) string {
+func processGeometry(asset *bungie.GearAssetDefinition, withSTL, withDAE, withUSD bool) string {
 
 	stlOutputPath := fmt.Sprintf("%s/%d.stl", ModelPathPrefix, asset.ID)
 	daeOutputPath := fmt.Sprintf("%s/%d.dae", ModelPathPrefix, asset.ID)
@@ -202,13 +204,19 @@ func processGeometry(asset *bungie.GearAssetDefinition, withSTL, withDAE bool) s
 			client := http.Client{}
 			req, _ := http.NewRequest("GET", bungie.UrlPrefix+bungie.GeometryPrefix+geometryFile, nil)
 			req.Header.Set("X-API-Key", BungieApiKey)
-			response, _ := client.Do(req)
+			response, err := client.Do(req)
+
+			if response == nil || err != nil {
+				glg.Errorf("Failed to request geometryFile: %s error: %s", geometryFile, err.Error())
+			}
+
 			if response.StatusCode != 200 {
 				glg.Errorf("Failed to download geometry for hash(%d), bad response: %d\n", asset.ID, response.StatusCode)
 				return ""
 			}
 
 			bodyBytes, _ := ioutil.ReadAll(response.Body)
+			response.Body.Close()
 			ioutil.WriteFile(geometryPath, bodyBytes, 0644)
 		} else {
 			glg.Info("Found cached geometry file...")
@@ -226,6 +234,14 @@ func processGeometry(asset *bungie.GearAssetDefinition, withSTL, withDAE bool) s
 			glg.Errorf("Error creating item subdirectory: %s", err.Error())
 		}
 	}
+
+	if withUSD {
+		glg.Info("Writing USD model...")
+		path := fmt.Sprintf("%s/%d.usda", outDir, asset.ID)
+		usdWriter := &graphics.USDWriter{Path: path, TexturePath: outDir}
+		usdWriter.WriteModel(geometries)
+	}
+
 	if withDAE {
 		glg.Info("Writing DAE model...")
 		path := fmt.Sprintf("%s/%d.dae", outDir, asset.ID)
@@ -269,13 +285,19 @@ func processTextures(asset *bungie.GearAssetDefinition) {
 			client := http.Client{}
 			req, _ := http.NewRequest("GET", bungie.UrlPrefix+bungie.TexturePrefix+textureFile, nil)
 			req.Header.Set("X-API-Key", BungieApiKey)
-			response, _ := client.Do(req)
+			response, err := client.Do(req)
+
+			if response == nil || err != nil {
+				glg.Errorf("Error downloading textureFile: %s error: %s", textureFile, err.Error())
+				continue
+			}
 
 			if response.StatusCode != 200 {
 				continue
 			}
 
 			bodyBytes, _ := ioutil.ReadAll(response.Body)
+			response.Body.Close()
 			ioutil.WriteFile(LocalTextureBasePath+textureFile, bodyBytes, 0644)
 		} else {
 			glg.Infof("Found cached texture file... %s", textureFile)

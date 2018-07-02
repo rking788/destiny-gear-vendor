@@ -12,10 +12,13 @@ import (
 	"github.com/tidwall/gjson"
 )
 
+// STLWriter is a type that wraps all the properties needed to write out an STL file
+// from a given Destiny item model.
 type STLWriter struct {
 	Path string
 }
 
+// WriteModels will write the provided DestinyGeomtry instances to an output STL file.
 func (stl *STLWriter) WriteModels(geoms []*bungie.DestinyGeometry) error {
 
 	geom := geoms[0]
