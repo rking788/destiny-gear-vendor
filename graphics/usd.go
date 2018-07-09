@@ -261,7 +261,10 @@ func (usd *USDWriter) writeMesh(meshIndex int, processed *processedOutput) error
 		glg.Debugf("Plate Indices: %+v", processed.plateIndices)
 		plateIndex := processed.plateIndices[meshIndex]
 		glg.Debugf("TexturePlates: %+v", processed.texturePlates)
-		materialID = processed.texturePlates[plateIndex].libraryMaterialID
+		plate := processed.texturePlates[plateIndex]
+		if plate != nil {
+			materialID = processed.texturePlates[plateIndex].libraryMaterialID
+		}
 	}
 
 	glg.Infof("Triangle Count: %d", triangleCount)

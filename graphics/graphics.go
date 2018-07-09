@@ -20,9 +20,11 @@ import (
 )
 
 const (
+	invertAO = true
 	// invertSmoothness is a flag indicating whether the smoothness attribute stored
 	// in the gearstack should be inverted into (hopefully?) roughness.
 	invertSmoothness = true
+	invertMetalness  = false
 )
 
 func processGeometry(geom *bungie.DestinyGeometry, output *processedOutput) error {
@@ -534,7 +536,11 @@ func ExplodePBRTexture(img image.Image) (*PBRTextureCollection, error) {
 			// Ambient occlusion
 			// I have no clue about this but i think it needs to be inverted to mostly white
 			// (that is what the examples show at least)
-			setPixel(result.AmbientOcclusion, 255-uint8(ao), x, y)
+			finalAO := uint8(ao)
+			if invertAO {
+				finalAO = 255 - uint8(ao)
+			}
+			setPixel(result.AmbientOcclusion, finalAO, x, y)
 
 			// Metalness
 			// from the slides "In the alpha channel we give metalness 32 values", i take this
@@ -542,17 +548,19 @@ func ExplodePBRTexture(img image.Image) (*PBRTextureCollection, error) {
 			normalized := float64(a&0xFF) / float64(0xFF)
 			masked := uint8((normalized * 0xFF)) & 0x1F
 			metalness := uint8((float64(masked) / 32.0) * 255.0)
+			if invertMetalness {
+				metalness = 255 - metalness
+			}
 			setPixel(result.Metalness, metalness, x, y)
 
 			// Roughness
 			originalSmoothness := uint8(smoothness & 0x00FF)
 			if invertSmoothness {
-				setPixel(result.Roughness, 255-uint8(originalSmoothness), x, y)
-			} else {
-				setPixel(result.Roughness, uint8(originalSmoothness), x, y)
+				originalSmoothness = 255 - originalSmoothness
 			}
+			setPixel(result.Roughness, originalSmoothness, x, y)
 
-			glg.Infof("ao=0x%x, smoothness=0x%x, maskedMetalness=0x%x, metalness=0x%x", ao, smoothness, masked, metalness)
+			//glg.Debugf("ao=0x%x, smoothness=0x%x, maskedMetalness=0x%x, metalness=0x%x", ao, smoothness, masked, metalness)
 		}
 	}
 
