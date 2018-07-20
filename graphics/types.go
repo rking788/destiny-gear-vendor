@@ -25,8 +25,8 @@ func (f texcoordVal) unsignedNormalize(bitNum float64) float32 {
 // PBRTextureCollection will contain the diffrent textures that need to be used for physically based
 // rendering (PBR).
 type PBRTextureCollection struct {
-	Metalness, Roughness, AmbientOcclusion draw.Image
-	ImageFormat                            string
+	Metalness, Roughness, AmbientOcclusion, Emissive draw.Image
+	ImageFormat                                      string
 }
 
 type texturePlate struct {

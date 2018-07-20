@@ -513,16 +513,19 @@ func ExplodePBRTexture(img image.Image) (*PBRTextureCollection, error) {
 	metalnessImg := image.NewRGBA(image.Rect(0, 0, img.Bounds().Dx(), img.Bounds().Dy()))
 	roughnessImg := image.NewRGBA(image.Rect(0, 0, img.Bounds().Dx(), img.Bounds().Dy()))
 	aoImg := image.NewRGBA(image.Rect(0, 0, img.Bounds().Dx(), img.Bounds().Dy()))
+	emissiveImg := image.NewRGBA(image.Rect(0, 0, img.Bounds().Dx(), img.Bounds().Dy()))
 
 	black := color.RGBA{0, 0, 0, 255}
 	draw.Draw(metalnessImg, metalnessImg.Bounds(), image.NewUniform(black), image.ZP, draw.Src)
 	draw.Draw(roughnessImg, roughnessImg.Bounds(), image.NewUniform(black), image.ZP, draw.Src)
 	draw.Draw(aoImg, aoImg.Bounds(), image.NewUniform(black), image.ZP, draw.Src)
+	draw.Draw(emissiveImg, emissiveImg.Bounds(), image.NewUniform(black), image.ZP, draw.Src)
 
 	result := &PBRTextureCollection{
 		Metalness:        metalnessImg,
 		Roughness:        roughnessImg,
 		AmbientOcclusion: aoImg,
+		Emissive:         emissiveImg,
 	}
 
 	origin := img.Bounds().Min
@@ -531,7 +534,7 @@ func ExplodePBRTexture(img image.Image) (*PBRTextureCollection, error) {
 
 	for x := origin.X; x < (origin.X + width); x++ {
 		for y := origin.Y; y < (origin.Y + height); y++ {
-			ao, smoothness, _, a := img.At(x, y).RGBA()
+			ao, smoothness, b, a := img.At(x, y).RGBA()
 
 			// Ambient occlusion
 			// I have no clue about this but i think it needs to be inverted to mostly white
@@ -552,6 +555,10 @@ func ExplodePBRTexture(img image.Image) (*PBRTextureCollection, error) {
 				metalness = 255 - metalness
 			}
 			setPixel(result.Metalness, metalness, x, y)
+
+			normalizedEmissive := float64(uint8(b)-40) / (255.0 - 40.0)
+			emissive := uint8(255.0 * normalizedEmissive)
+			setPixel(result.Emissive, emissive, x, y)
 
 			// Roughness
 			originalSmoothness := uint8(smoothness & 0x00FF)
@@ -600,10 +607,12 @@ func writeTextures(processed *processedOutput, pathPrefix string) error {
 		aoName := strings.Replace(plate.name, "gearstack", "AO", -1)
 		metalnessName := strings.Replace(plate.name, "gearstack", "metalness", -1)
 		roughnessName := strings.Replace(plate.name, "gearstack", "roughness", -1)
+		emissiveName := strings.Replace(plate.name, "gearstack", "emissive", -1)
 
 		writeTextureFile(pbr.AmbientOcclusion, pathPrefix, aoName)
 		writeTextureFile(pbr.Metalness, pathPrefix, metalnessName)
 		writeTextureFile(pbr.Roughness, pathPrefix, roughnessName)
+		writeTextureFile(pbr.Emissive, pathPrefix, emissiveName)
 	}
 
 	return nil

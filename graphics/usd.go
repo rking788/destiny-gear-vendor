@@ -122,9 +122,10 @@ func (usd *USDWriter) writeMaterials(processed *processedOutput) error {
 		aoName := strings.Replace(gearstackName, "gearstack", "AO", -1)
 		metalnessName := strings.Replace(gearstackName, "gearstack", "metalness", -1)
 		roughnessName := strings.Replace(gearstackName, "gearstack", "roughness", -1)
+		emissiveName := strings.Replace(gearstackName, "gearstack", "emissive", -1)
 
 		plate.libraryMaterialID = fmt.Sprintf("Material%d", i)
-		err = usd.writeMaterial(plate.libraryMaterialID, plate.name, aoName, metalnessName, roughnessName)
+		err = usd.writeMaterial(plate.libraryMaterialID, plate.name, aoName, metalnessName, roughnessName, emissiveName)
 	}
 
 	_, err = usd.output.Write([]byte(`    def Material "lambert1"
@@ -138,7 +139,7 @@ func (usd *USDWriter) writeMaterials(processed *processedOutput) error {
 	return err
 }
 
-func (usd *USDWriter) writeMaterial(matID, albedoFilename, aoName, metalnessName, roughnessName string) error {
+func (usd *USDWriter) writeMaterial(matID, albedoFilename, aoName, metalnessName, roughnessName, emissiveName string) error {
 
 	_, err := usd.output.Write([]byte(`    def Material "` + matID + `"
 	{
@@ -153,7 +154,7 @@ func (usd *USDWriter) writeMaterial(matID, albedoFilename, aoName, metalnessName
 			float inputs:clearcoatRoughness = 0
 			color3f inputs:diffuseColor.connect = </Materials/` + matID + `/color_map.outputs:rgb>
 			float inputs:displacement = 0
-			color3f inputs:emissiveColor = (0, 0, 0)
+			color3f inputs:emissive.connect = </Materials/` + matID + `/emissive_map.outputs:r>
 			float inputs:ior = 1.5
 			float inputs:metallic.connect = </Materials/` + matID + `/metallic_map.outputs:r>
 			normal3f inputs:normal.connect = </Materials/` + matID + `/normal_map.outputs:rgb>
@@ -223,7 +224,18 @@ func (usd *USDWriter) writeMaterial(matID, albedoFilename, aoName, metalnessName
             token inputs:wrapS = "repeat"
             token inputs:wrapT = "repeat"
             float outputs:r
-        }
+		}
+		
+		def Shader "emissive_map"
+		{
+			uniform token info:id = "UsdUVTexture"
+            float4 inputs:default = (0, 0, 0, 1)
+            asset inputs:file = @` + emissiveName + `@
+            float2 inputs:st.connect = </Materials/` + matID + `/Primvar.outputs:result>
+            token inputs:wrapS = "repeat"
+            token inputs:wrapT = "repeat"
+            float outputs:r
+		}
 	}
 
 `))

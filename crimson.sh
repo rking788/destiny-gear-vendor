@@ -6,11 +6,13 @@
 # Rat King Sparrow: 1173626681
 # Rat King sidearm: 2362471601
 # Jade Rabbit (Jester ornament)
+# Whisper of the worm: 1891561814
 #hash="1173626681"
 #hash="3393130645"
 #hash="3437746471"
-hash="2362471601"
+#hash="2362471601"
 #hash="1970437989"
+hash="1891561814"
 #rm output/gear.scnassets/$hash/$hash.dae
 rm output/gear.scnassets/$hash/$hash.usda
 rm output/gear.scnassets/$hash/$hash.usdc
