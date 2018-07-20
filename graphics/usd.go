@@ -125,7 +125,8 @@ func (usd *USDWriter) writeMaterials(processed *processedOutput) error {
 		emissiveName := strings.Replace(gearstackName, "gearstack", "emissive", -1)
 
 		plate.libraryMaterialID = fmt.Sprintf("Material%d", i)
-		err = usd.writeMaterial(plate.libraryMaterialID, plate.name, aoName, metalnessName, roughnessName, emissiveName)
+		normalName := processed.normalTexturePlates[i].name
+		err = usd.writeMaterial(plate.libraryMaterialID, plate.name, normalName, aoName, metalnessName, roughnessName, emissiveName)
 	}
 
 	_, err = usd.output.Write([]byte(`    def Material "lambert1"
@@ -139,7 +140,7 @@ func (usd *USDWriter) writeMaterials(processed *processedOutput) error {
 	return err
 }
 
-func (usd *USDWriter) writeMaterial(matID, albedoFilename, aoName, metalnessName, roughnessName, emissiveName string) error {
+func (usd *USDWriter) writeMaterial(matID, albedoFilename, normalName, aoName, metalnessName, roughnessName, emissiveName string) error {
 
 	_, err := usd.output.Write([]byte(`    def Material "` + matID + `"
 	{
@@ -193,6 +194,17 @@ func (usd *USDWriter) writeMaterial(matID, albedoFilename, aoName, metalnessName
 `))
 	} else {
 		usd.output.Write([]byte(`
+        def Shader "normal_map"
+        {
+            uniform token info:id = "UsdUVTexture"
+            float4 inputs:default = (0, 0, 0, 1)
+            asset inputs:file = @` + normalName + `@
+            float2 inputs:st.connect = </Materials/` + matID + `/Primvar.outputs:result>
+            token inputs:wrapS = "repeat"
+            token inputs:wrapT = "repeat"
+            float outputs:r
+        }
+
         def Shader "ao_map"
         {
             uniform token info:id = "UsdUVTexture"
