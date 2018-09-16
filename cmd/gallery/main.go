@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"html/template"
+	"io"
 	"os"
 	"path"
 	"path/filepath"
@@ -83,6 +84,28 @@ func main() {
 	tpl := template.New("gallery.tpl.html")
 	tpl.ParseFiles("gallery.tpl.html")
 	tpl.Execute(outF, templateData)
+
+	// Copy the screen.css file to the same output directory as the index.html
+	cssPath := path.Join(*inPath, "screen.css")
+	inF, err := os.Open("screen.css")
+	if err != nil {
+		glg.Errorf("Error copying screen.css to destination: ", err.Error())
+		return
+	}
+	defer inF.Close()
+
+	outCSS, err := os.Create(cssPath)
+	if err != nil {
+		glg.Errorf("Error opening destination file for screen.css: ", err.Error())
+		return
+	}
+	defer outF.Close()
+
+	_, err = io.Copy(inF, outCSS)
+	if err != nil {
+		glg.Errorf("Failed to copy input to output for screen.css: ", err.Error())
+		return
+	}
 }
 
 type sortTier []*itemMetadata
