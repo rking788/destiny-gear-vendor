@@ -8,9 +8,9 @@ const (
 	UrlPrefix          = "http://www.bungie.net"
 	GeometryPrefix     = "/common/destiny2_content/geometry/platform/mobile/geometry/"
 	TexturePrefix      = "/common/destiny2_content/geometry/platform/mobile/textures/"
-	GearPrefix         = "/common/destiny2_content/geometry/gear"
-	PlatedRegionPrefix = "/common/destiny2_content/geometry/platform/mobile/plated_textures"
-	ShaderPrefix       = "/common/destiny2_content/geometry/platform/mobile/shaders"
+	GearPrefix         = "/common/destiny2_content/geometry/gear/"
+	PlatedRegionPrefix = "/common/destiny2_content/geometry/platform/mobile/plated_textures/"
+	ShaderPrefix       = "/common/destiny2_content/geometry/platform/mobile/shaders/"
 )
 
 type DestinyGeometry struct {

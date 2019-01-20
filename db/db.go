@@ -92,9 +92,10 @@ func (db *AssetDB) GetAllAssetDefinitions() ([]map[string]interface{}, error) {
 func (db *AssetDB) GetWeaponAssetDefinitions() ([]map[string]interface{}, error) {
 
 	result := make([]map[string]interface{}, 0, 200)
-	rows, err := db.Database.Query("SELECT assets.id, assets.json FROM assets, items where " +
-		"(assets.id = items.item_hash AND (items.bucket_type_hash IN (953998645, 2465295065, " +
-		"1498876634)) OR (item_type_name = 'weapon ornament'))")
+	rows, err := db.Database.Query("SELECT assets.id, assets.json FROM assets, items " +
+		"WHERE assets.id = items.item_hash " +
+		"AND (items.bucket_type_hash IN (953998645, 2465295065, 1498876634) " +
+		"OR item_type_name = 'weapon ornament')")
 
 	if err != nil {
 		return result, err

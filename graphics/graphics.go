@@ -128,6 +128,11 @@ func processTexturePlate(plateName string, texturePlateJSON map[string]gjson.Res
 		glg.Error(err)
 		return err
 	}
+	if len(matches) == 0 {
+		err = errors.New("Found zero matching texture files matching name " + textureTagName)
+		glg.Error(err)
+		return err
+	}
 
 	// Copy this data into the destination image
 	inF, err := os.OpenFile(matches[0], os.O_RDONLY, 0644)

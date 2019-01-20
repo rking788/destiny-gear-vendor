@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io/ioutil"
@@ -32,29 +33,17 @@ import (
 **/
 
 const (
-	ModelPathPrefix       = "./output/gear.scnassets/"
-	ModelNamePrefix       = ModelPathPrefix
-	TexturePathPrefix     = "./output/"
-	LocalGeometryBasePath = "./local_tools/geom/geometry/"
-	LocalTextureBasePath  = "./local_tools/geom/textures/"
+	ModelPathPrefix         = "./output/gear.scnassets/"
+	ModelNamePrefix         = ModelPathPrefix
+	TexturePathPrefix       = "./output/"
+	LocalGeometryBasePath   = "./local_tools/geom/geometry/"
+	LocalTextureBasePath    = "./local_tools/geom/textures/"
+	RenderMeshesBasePath    = "./local_tools/"
+	AssetDefinitionBasePath = "./local_tools/"
 )
 
 var (
 	BungieApiKey = os.Getenv("BUNGIE_API_KEY")
-
-	// Unused coord pair: [1.3330078125, 2.666015625]
-	/*"texcoord_offset": [
-	    0.401725,
-	    0.400094
-	  ],
-	  "texcoord_scale": [
-	    0.396719,
-	    0.396719
-	  ],*/
-	//UnusedX        = 1.3330078125
-	//UnusedY        = 2.66015625
-	//UnusedX          = 1.333333333333333
-	//UnusedY          = 2.666666666666667
 )
 
 func main() {
@@ -158,6 +147,11 @@ func executeCommand(hash uint, withAllAssets, withWeapons, withGhosts, withVehic
 
 	for _, assetDefinition := range assetDefinitions {
 		glg.Infof("Processing item with hash: %d", assetDefinition.ID)
+
+		// Write the asset definition out to a local file
+		writeAssetDefinition(assetDefinition)
+		writeGearDescription(assetDefinition)
+
 		if withTextures {
 			processTextures(assetDefinition)
 		}
@@ -173,6 +167,55 @@ func fileExists(path string) bool {
 	}
 
 	return true
+}
+
+func writeAssetDefinition(def *bungie.GearAssetDefinition) {
+	fullPath := AssetDefinitionBasePath + fmt.Sprintf("%d-asset-def.json", def.ID)
+	if fileExists(fullPath) {
+		glg.Info("Found cached asset definition")
+		return
+	}
+
+	outF, err := os.OpenFile(fullPath, os.O_WRONLY|os.O_CREATE, 0644)
+	if err != nil {
+		glg.Errorf("Failed to open asset definition file: %s", err.Error())
+	}
+	encoder := json.NewEncoder(outF)
+	encoder.Encode(def)
+	outF.Close()
+}
+
+func writeGearDescription(def *bungie.GearAssetDefinition) {
+	fullPath := AssetDefinitionBasePath + fmt.Sprintf("%d-gear-%s", def.ID, def.Gear[0])
+	if fileExists(fullPath) {
+		glg.Info("Found cached gear description")
+		return
+	}
+
+	glg.Info("Downloading gear description: %s", def.Gear[0])
+	client := http.Client{}
+	gearURL := bungie.UrlPrefix + bungie.GearPrefix + def.Gear[0]
+	fmt.Printf("Requesting gear URL : %s\n", gearURL)
+	req, _ := http.NewRequest("GET", bungie.UrlPrefix+bungie.GearPrefix+def.Gear[0], nil)
+	req.Header.Set("X-API-Key", BungieApiKey)
+	response, err := client.Do(req)
+	if err != nil {
+		glg.Errorf("Could not download gear description: %s", err.Error())
+		return
+	}
+
+	responseBytes, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		glg.Errorf("Failed to read gear description response: %s", err.Error())
+		return
+	}
+	defer response.Body.Close()
+
+	err = ioutil.WriteFile(fullPath, responseBytes, 0644)
+	if err != nil {
+		glg.Errorf("Failed to write asset description locally: %s", err.Error())
+		return
+	}
 }
 
 func processGeometry(asset *bungie.GearAssetDefinition, withSTL, withDAE, withUSD bool) string {
@@ -389,7 +432,7 @@ func parseGeometryFile(asset *bungie.GearAssetDefinition, index int, path string
 	}
 
 	safeGeomName := strings.Replace(filepath.Base(path), ".", "", -1)
-	err = ioutil.WriteFile(fmt.Sprintf("./local_tools/%d-%d-%s-meshes.json",
+	err = ioutil.WriteFile(fmt.Sprintf(RenderMeshesBasePath+"%d-%d-%s-meshes.json",
 		asset.ID, index, safeGeomName), geom.MeshesBytes, 0644)
 	if err != nil {
 		glg.Errorf("Failed to write render meshes: %s", err.Error())

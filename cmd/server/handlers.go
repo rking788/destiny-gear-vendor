@@ -27,7 +27,7 @@ func GetAsset(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Forgot to specify an asset format"))
 		return
 	}
-	if format != "dae" && format != "stl" {
+	if format != "dae" && format != "stl" && format != "usd" {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("Invalid asset format specified"))
 		return
