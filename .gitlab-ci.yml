@@ -1,0 +1,33 @@
+image: docker:stable
+  
+services:
+  - docker:dind
+
+variables:
+  DOCKER_HOST: tcp://docker:2375/
+
+stages:
+  - dockerize
+  - staging
+  - master
+
+dockerize:
+  stage: dockerize
+  script:
+    - ./scripts/build.sh
+  only:
+    - develop
+
+staging:
+  stage: staging
+  script:
+    - ./scripts/build.sh
+    - ./scripts/push.sh
+  only:
+    - staging
+
+master:
+  stage: master
+  script:
+    - ./scripts/build.sh --latest
+    - ./scripts/push.sh --latest

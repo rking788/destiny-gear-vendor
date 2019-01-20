@@ -1,7 +1,12 @@
-#!/bin/bash
+#!/bin/sh
 
 version=$(cat ../VERSION)
-hash=$(git rev-parse --short HEAD)
+if [ -n "$CI_COMMIT_SHORT_SHA" ]
+then
+  hash="$CI_COMMIT_SHORT_SHA"
+else
+  hash="$(git rev-parse --short HEAD)"
+fi
 
 if [ -z $BUILD_NUMBER ]
 then
