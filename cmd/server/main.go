@@ -14,7 +14,6 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/kpango/glg"
-
 	"github.com/rking788/destiny-gear-vendor/bungie"
 	"github.com/rking788/destiny-gear-vendor/graphics"
 )
@@ -283,6 +282,8 @@ func processGeometry(asset *bungie.GearAssetDefinition, withSTL, withDAE, withUS
 		path := fmt.Sprintf("%s/%d.usda", outDir, asset.ID)
 		usdWriter := &graphics.USDWriter{Path: path, TexturePath: outDir}
 		usdWriter.WriteModel(geometries)
+
+		return path
 	}
 
 	if withDAE {

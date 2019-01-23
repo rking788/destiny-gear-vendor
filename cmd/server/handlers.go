@@ -49,6 +49,12 @@ func GetAsset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Only include textures for DAE and USD formats
+	withTextures := (format == "dae" || format == "usd")
+	if withTextures {
+		processTextures(assetDefinition)
+	}
+
 	path := processGeometry(assetDefinition, (format == "stl"), (format == "dae"), (format == "usd"))
 	if path == "" {
 		w.WriteHeader(http.StatusInternalServerError)
