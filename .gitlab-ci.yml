@@ -20,14 +20,16 @@ dockerize:
 
 staging:
   stage: staging
+  only:
+    -staging
   script:
     - ./scripts/build.sh
     - ./scripts/push.sh
-  only:
-    - staging
 
 master:
   stage: master
+  only:
+    -master
   script:
     - ./scripts/build.sh --latest
     - ./scripts/push.sh --latest
