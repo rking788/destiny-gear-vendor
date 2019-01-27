@@ -1,14 +1,17 @@
 package main
 
 import (
+	"archive/zip"
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -283,6 +286,12 @@ func processGeometry(asset *bungie.GearAssetDefinition, withSTL, withDAE, withUS
 		usdWriter := &graphics.USDWriter{Path: path, TexturePath: outDir}
 		usdWriter.WriteModel(geometries)
 
+		path, err := createUSDZ(outDir, asset.ID)
+		if err != nil {
+			glg.Errorf("Error creating USDZ file: %s", err.Error())
+			return ""
+		}
+
 		return path
 	}
 
@@ -313,6 +322,123 @@ func processGeometry(asset *bungie.GearAssetDefinition, withSTL, withDAE, withUS
 	}
 
 	return ""
+}
+
+func convertASCIIToBinary(path string) error {
+
+	usdcPath := strings.Replace(path, "usda", "usdc", -1)
+
+	err := exec.Command("usdcat", "-o", usdcPath, path).Run()
+
+	return err
+}
+
+func zipUSDZ(dir string, id uint, outPath string) error {
+	// .jpeg and .jpg textures
+	jpegs, err := filepath.Glob(fmt.Sprintf("%s/*.j*g", dir))
+	if err != nil {
+		return err
+	}
+
+	// .png textures
+	pngs, err := filepath.Glob(fmt.Sprintf("%s/*.png", dir))
+	if err != nil {
+		return err
+	}
+
+	// the converted USDC model
+	usdc := fmt.Sprintf("%s/%d.usdc", dir, id)
+
+	included := make([]string, 0, 15)
+	included = append(included, usdc)
+	included = append(included, jpegs...)
+	included = append(included, pngs...)
+
+	usdzFile, err := os.Create(outPath)
+	if err != nil {
+		return err
+	}
+	defer usdzFile.Close()
+
+	zipWriter := zip.NewWriter(usdzFile)
+	if err != nil {
+		return err
+	}
+	defer zipWriter.Close()
+
+	for i := range included {
+
+		zipfile, err := os.Open(included[i])
+		if err != nil {
+			return err
+		}
+		defer zipfile.Close()
+
+		info, err := zipfile.Stat()
+		if err != nil {
+			return err
+		}
+
+		header, err := zip.FileInfoHeader(info)
+		if err != nil {
+			return err
+		}
+
+		writer, err := zipWriter.CreateHeader(header)
+		if err != nil {
+			return err
+		}
+
+		// I have no idea why (and it is outlined in the docs that you should not edit this after CreateHeader) but
+		// clearing these flags is required to generate a valid USDZ file. I tried working around this with a temp
+		// buffer so the size would ideally would be known when it is copied but that didn't help.
+		// Not sure why but here is what the Wiki page says for it:
+		// "If the bit at offset 3 (0x08) of the general-purpose flags field is set, then the CRC-32 and file sizes
+		// are not known when the header is written. The fields in the local header are filled with zero, and the
+		// CRC-32 and size are appended in a 12-byte structure (optionally preceded by a 4-byte signature) immediately
+		// after the compressed data:"
+		// Find out more here: https://en.wikipedia.org/wiki/Zip_(file_format)
+		header.Flags = 0
+
+		if _, err = io.Copy(writer, zipfile); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func alignUSDZ(unalignedUSDZPath, alignedUSDZPath string) error {
+
+	err := exec.Command("zipalign", "-f", "64", unalignedUSDZPath, alignedUSDZPath).Run()
+
+	return err
+}
+
+func createUSDZ(dir string, id uint) (string, error) {
+
+	usdaPath := fmt.Sprintf("%s/%d.usda", dir, id)
+	err := convertASCIIToBinary(usdaPath)
+	if err != nil {
+		return "", err
+	}
+	//os.Remove(usdaPath)
+
+	unalignedUSDZPath := fmt.Sprintf("%s/%d-unaligned.usdz", dir, id)
+	alignedUSDZPath := fmt.Sprintf("%s/%d.usdz", dir, id)
+	err = zipUSDZ(dir, id, unalignedUSDZPath)
+	if err != nil {
+		return "", err
+	}
+	os.Remove(strings.Replace(usdaPath, "usda", "usdc", -1))
+
+	err = alignUSDZ(unalignedUSDZPath, alignedUSDZPath)
+	if err != nil {
+		return "", err
+	}
+	os.Remove(unalignedUSDZPath)
+
+	return alignedUSDZPath, nil
 }
 
 func processTextures(asset *bungie.GearAssetDefinition) {

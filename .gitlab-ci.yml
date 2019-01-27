@@ -11,6 +11,9 @@ stages:
   - staging
   - master
 
+before_script:
+  - docker login -u gitlab-ci-token -p $CI_JOB_TOKEN registry.gitlab.com
+
 dockerize:
   stage: dockerize
   script:
@@ -21,7 +24,7 @@ dockerize:
 staging:
   stage: staging
   only:
-    -staging
+    - staging
   script:
     - ./scripts/build.sh
     - ./scripts/push.sh
@@ -29,7 +32,7 @@ staging:
 master:
   stage: master
   only:
-    -master
+    - master
   script:
     - ./scripts/build.sh --latest
     - ./scripts/push.sh --latest
