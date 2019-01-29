@@ -7,12 +7,21 @@ variables:
   DOCKER_HOST: tcp://docker:2375/
 
 stages:
+  - branches
   - dockerize
   - staging
   - master
 
 before_script:
   - docker login -u gitlab-ci-token -p $CI_JOB_TOKEN registry.gitlab.com
+
+branches:
+  stage: branches
+  only:
+    - feature/branch-specifiers
+  script:
+    - ./scripts/build.sh
+    - ./scripts/push.sh
 
 dockerize:
   stage: dockerize
