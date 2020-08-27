@@ -9,53 +9,48 @@
 </head>
 
 <body>
-    <div class="rewards">
 
-        <form id=search-form>
-            <div class="form-group">
-                <label for="search-text">Search for:</label>
-                <input type="text" class="form-control-plaintext" id="search-text" aria-describedby="search text"
-                    placeholder="Type...">
-                <small id="search-help" class="form-text text-muted">Enter text and tap search</small>
-            </div>
-            <button type="submit" id="search-button" class="btn btn-primary" disabled>Search</button>
-        </form>
+    <div class="form-group">
+        <label for="search-text">Search for:</label>
+        <input type="text" class="form-control-plaintext" id="search-text" aria-describedby="search text"
+            placeholder="Type..." oninput="textChanged()" disabled>
+    </div>
 
-        <script>
-            window.addEventListener("load", function () {
-                const searchButton = document.getElementById('search-button');
-                searchButton.removeAttribute("disabled");
+    <script>
+        window.addEventListener("load", function () {
+            const searchText = document.getElementById('search-text');
+            searchText.removeAttribute("disabled");
+        });
+        function textChanged() {
+            const search = document.getElementById('search-text').value;
 
-                document.getElementById('search-form').addEventListener("submit", function (e) {
-                    e.preventDefault(); // before the code
-                    /* do what you want with the form */
-                    const search = document.getElementById('search-text').value;
-                    let gear = document.getElementsByClassName('item');
+            let gear = document.getElementsByClassName('item');
 
-                    for (let i = 0; i < gear.length; i++) {
-                        const gearPiece = gear[i];
-                        const name = gearPiece.getAttribute('data-name');
-                        if (name.includes(search)) {
-                            gearPiece.style.display = "";
-                        } else {
-                            gearPiece.style.display = "none";
-                        }
-                    }
-                });
-            });
-        </script>
+            for (let i = 0; i < gear.length; i++) {
+                const gearPiece = gear[i];
+                const name = gearPiece.getAttribute('data-name');
+
+                if (name.includes(search)) {
+                    gearPiece.style.display = "";
+                } else {
+                    gearPiece.style.display = "none";
+                }
+            }
+        }
+
+    </script>
 
 
-        <!--<h2>Rewards</h2>-->
-        <div class="items">
-            {{- range .Items }}
-            <div class="item" data-name="{{.ItemName}}" data-id="{{.ID}}">
-                <a rel="ar" href="{{.ModelName}}">
-                    <img class="item-icon" src="{{.ThumbnailURL}}" />
-                </a>
-            </div>
-            {{- end}}
+    <!--<h2>Rewards</h2>-->
+    <div class="items">
+        {{- range .Items }}
+        <div class="item" data-name="{{.ItemName}}" data-id="{{.ID}}">
+            <a rel="ar" href="{{.ModelName}}">
+                <img class="item-icon" src="{{.ThumbnailURL}}" />
+            </a>
         </div>
+        {{- end}}
+    </div>
     </div>
     <!-- Optional JavaScript -->
     <!-- jQuery first, then Popper.js, then Bootstrap JS -->
