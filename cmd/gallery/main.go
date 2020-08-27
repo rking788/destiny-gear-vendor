@@ -16,6 +16,7 @@ import (
 )
 
 type itemMetadata struct {
+	ID           string
 	ModelName    string
 	ItemName     string
 	ThumbnailURL string
@@ -70,6 +71,7 @@ func main() {
 
 	for _, item := range existing {
 		i := &itemMetadata{
+			ID:           item.Hash,
 			ModelName:    item.Hash + ".usdz",
 			ItemName:     item.Name,
 			ThumbnailURL: fmt.Sprintf("https://www.bungie.net%s", item.Icon),
@@ -101,7 +103,7 @@ func main() {
 	}
 	defer outF.Close()
 
-	_, err = io.Copy(inF, outCSS)
+	_, err = io.Copy(outCSS, inF)
 	if err != nil {
 		glg.Errorf("Failed to copy input to output for screen.css: ", err.Error())
 		return
