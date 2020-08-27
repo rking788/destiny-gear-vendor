@@ -91,21 +91,21 @@ func main() {
 	cssPath := path.Join(*inPath, "screen.css")
 	inF, err := os.Open("screen.css")
 	if err != nil {
-		glg.Errorf("Error copying screen.css to destination: ", err.Error())
+		glg.Errorf("Error copying screen.css to destination: \n", err.Error())
 		return
 	}
 	defer inF.Close()
 
 	outCSS, err := os.Create(cssPath)
 	if err != nil {
-		glg.Errorf("Error opening destination file for screen.css: ", err.Error())
+		glg.Errorf("Error opening destination file for screen.css: \n", err.Error())
 		return
 	}
 	defer outF.Close()
 
 	_, err = io.Copy(outCSS, inF)
 	if err != nil {
-		glg.Errorf("Failed to copy input to output for screen.css: ", err.Error())
+		glg.Errorf("Failed to copy input to output for screen.css: \n", err.Error())
 		return
 	}
 }
