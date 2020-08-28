@@ -65,6 +65,7 @@ func main() {
 		glg.Errorf("Error opening index.html: %s", err.Error())
 		return
 	}
+	defer outF.Close()
 
 	templateData := output{}
 	templateData.Items = make([]*itemMetadata, 0, 200)
@@ -87,25 +88,33 @@ func main() {
 	tpl.ParseFiles("gallery.tpl.html")
 	tpl.Execute(outF, templateData)
 
-	// Copy the screen.css file to the same output directory as the index.html
-	cssPath := path.Join(*inPath, "screen.css")
-	inF, err := os.Open("screen.css")
+	// Copy the screen.css and search.js files to the same output directory as
+	// the index.html
+	filesToCopy := []string{"screen.css", "search.js"}
+	for _, name := range filesToCopy {
+		copyFile(name, *inPath)
+	}
+}
+
+func copyFile(name, inPath string) {
+
+	path := path.Join(inPath, name)
+	src, err := os.Open(name)
 	if err != nil {
-		glg.Errorf("Error copying screen.css to destination: \n", err.Error())
+		glg.Errorf("Error copying %s to destination: \n", name, err.Error())
 		return
 	}
-	defer inF.Close()
+	defer src.Close()
 
-	outCSS, err := os.Create(cssPath)
+	dst, err := os.Create(path)
 	if err != nil {
-		glg.Errorf("Error opening destination file for screen.css: \n", err.Error())
+		glg.Errorf("Error opening destination file for %s: \n", name, err.Error())
 		return
 	}
-	defer outF.Close()
 
-	_, err = io.Copy(outCSS, inF)
+	_, err = io.Copy(dst, src)
 	if err != nil {
-		glg.Errorf("Failed to copy input to output for screen.css: \n", err.Error())
+		glg.Errorf("Failed to copy input to output for %s: \n", name, err.Error())
 		return
 	}
 }
