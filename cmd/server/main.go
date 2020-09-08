@@ -60,7 +60,9 @@ func main() {
 	withVehicles := flag.Bool("vehicles", false, "Generate models for all vehicle assets in the DB")
 	withSTL := flag.Bool("stl", false, "Use this to request STL format assets")
 	withDAE := flag.Bool("dae", false, "Use this flag to request DAE format assets")
-	withUSD := flag.Bool("usd", false, "Write the model for the specified Destiny gear in USD format")
+	withUSDA := flag.Bool("usda", false, "Write the model for the specified Destiny gear in USDZ format")
+	withUSDC := flag.Bool("usdc", false, "Write the model for the specified Destiny gear in USDZ format")
+	withUSDZ := flag.Bool("usdz", false, "Write the model for the specified Destiny gear in USDZ format")
 	withGeom := flag.Bool("geom", false, "Indicates that geometries should be parsed and written")
 	withTextures := flag.Bool("textures", false, "Indicates that textures should be processed")
 	flag.Parse()
@@ -68,7 +70,9 @@ func main() {
 	fmt.Printf("IsCLI: %v\n", *isCLI)
 
 	if *isCLI {
-		executeCommand(*itemHash, *withAllAssets, *withWeapons, *withGhosts, *withVehicles, *withSTL, *withDAE, *withUSD, *withGeom, *withTextures)
+		// TODO: This should combine all this configuration into some kind of
+		// struct or something.
+		executeCommand(*itemHash, *withAllAssets, *withWeapons, *withGhosts, *withVehicles, *withSTL, *withDAE, *withUSDA, *withUSDC, *withUSDZ, *withGeom, *withTextures)
 		return
 	}
 
@@ -85,17 +89,19 @@ func main() {
 	glg.Error(http.ListenAndServe(":"+port, router))
 }
 
-func executeCommand(hash uint, withAllAssets, withWeapons, withGhosts, withVehicles, withSTL, withDAE, withUSD, withGeom, withTextures bool) {
+func executeCommand(hash uint, withAllAssets, withWeapons, withGhosts, withVehicles, withSTL, withDAE, withUSDA, withUSDC, withUSDZ, withGeom, withTextures bool) {
 	fmt.Printf("WithSTL: %v\n", withSTL)
 	fmt.Printf("WithDAE: %v\n", withDAE)
-	fmt.Printf("WithUSD: %v\n", withUSD)
+	fmt.Printf("WithUSDA: %v\n", withUSDA)
+	fmt.Printf("WithUSDC: %v\n", withUSDC)
+	fmt.Printf("WithUSDZ: %v\n", withUSDZ)
 
 	if hash == 0 && withAllAssets == false && withWeapons == false {
 		glg.Error("Forgot to provide an item hash!")
 		return
 	}
 
-	if withSTL == false && withDAE == false && withUSD == false {
+	if withSTL == false && withDAE == false && withUSDA == false && withUSDC == false && withUSDZ == false {
 		glg.Error("No output format specified!")
 		return
 	}
@@ -158,7 +164,7 @@ func executeCommand(hash uint, withAllAssets, withWeapons, withGhosts, withVehic
 			processTextures(assetDefinition)
 		}
 		if withGeom {
-			processGeometry(assetDefinition, withSTL, withDAE, withUSD)
+			processGeometry(assetDefinition, withSTL, withDAE, withUSDA, withUSDC, withUSDZ)
 		}
 	}
 }
@@ -220,7 +226,7 @@ func writeGearDescription(def *bungie.GearAssetDefinition) {
 	}
 }
 
-func processGeometry(asset *bungie.GearAssetDefinition, withSTL, withDAE, withUSD bool) string {
+func processGeometry(asset *bungie.GearAssetDefinition, withSTL, withDAE, withUSDA, withUSDC, withUSDZ bool) string {
 
 	stlOutputPath := fmt.Sprintf("%s/%d.stl", ModelPathPrefix, asset.ID)
 	daeOutputPath := fmt.Sprintf("%s/%d.dae", ModelPathPrefix, asset.ID)
@@ -280,13 +286,18 @@ func processGeometry(asset *bungie.GearAssetDefinition, withSTL, withDAE, withUS
 		}
 	}
 
-	if withUSD {
+	if withUSDA || withUSDC || withUSDZ {
 		glg.Info("Writing USD model...")
 		path := fmt.Sprintf("%s/%d.usda", outDir, asset.ID)
 		usdWriter := &graphics.USDWriter{Path: path, TexturePath: outDir}
-		usdWriter.WriteModel(geometries)
 
-		path, err := createUSDZ(outDir, asset.ID)
+		err := usdWriter.WriteModel(geometries)
+		if err != nil {
+			glg.Errorf("Failed to write model for asset = %d: %v", asset.ID, err)
+			return ""
+		}
+
+		path, err = createUSDZ(outDir, asset.ID, withUSDA, withUSDC, withUSDZ)
 		if err != nil {
 			glg.Errorf("Error creating USDZ file: %s", err.Error())
 			return ""
@@ -333,26 +344,14 @@ func convertASCIIToBinary(path string) error {
 	return err
 }
 
-func zipUSDZ(dir string, id uint, outPath string) error {
-	// .jpeg and .jpg textures
-	jpegs, err := filepath.Glob(fmt.Sprintf("%s/*.j*g", dir))
-	if err != nil {
-		return err
-	}
-
-	// .png textures
-	pngs, err := filepath.Glob(fmt.Sprintf("%s/*.png", dir))
-	if err != nil {
-		return err
-	}
+func zipUSDZ(dir string, id uint, texturePaths []string, outPath string) error {
 
 	// the converted USDC model
 	usdc := fmt.Sprintf("%s/%d.usdc", dir, id)
 
 	included := make([]string, 0, 15)
 	included = append(included, usdc)
-	included = append(included, jpegs...)
-	included = append(included, pngs...)
+	included = append(included, texturePaths...)
 
 	usdzFile, err := os.Create(outPath)
 	if err != nil {
@@ -415,22 +414,47 @@ func alignUSDZ(unalignedUSDZPath, alignedUSDZPath string) error {
 	return err
 }
 
-func createUSDZ(dir string, id uint) (string, error) {
+func createUSDZ(dir string, id uint, withUSDA, withUSDC, withUSDZ bool) (string, error) {
 
 	usdaPath := fmt.Sprintf("%s/%d.usda", dir, id)
 	err := convertASCIIToBinary(usdaPath)
 	if err != nil {
 		return "", err
 	}
-	//os.Remove(usdaPath)
+	if !withUSDA {
+		defer os.Remove(usdaPath)
+	}
 
-	unalignedUSDZPath := fmt.Sprintf("%s/%d-unaligned.usdz", dir, id)
-	alignedUSDZPath := fmt.Sprintf("%s/%d.usdz", dir, id)
-	err = zipUSDZ(dir, id, unalignedUSDZPath)
+	// .jpeg and .jpg textures
+	texturePaths, err := filepath.Glob(fmt.Sprintf("%s/*.j*g", dir))
 	if err != nil {
 		return "", err
 	}
-	os.Remove(strings.Replace(usdaPath, "usda", "usdc", -1))
+
+	// .png textures
+	pngs, err := filepath.Glob(fmt.Sprintf("%s/*.png", dir))
+	if err != nil {
+		return "", err
+	}
+	texturePaths = append(texturePaths, pngs...)
+	if !withUSDA && !withUSDC {
+		// Cleanup textures if they will not be used after they are zipped up
+		defer func(paths []string) {
+			for _, f := range paths {
+				os.Remove(f)
+			}
+		}(texturePaths)
+	}
+
+	unalignedUSDZPath := fmt.Sprintf("%s/%d-unaligned.usdz", dir, id)
+	alignedUSDZPath := fmt.Sprintf("%s/%d.usdz", dir, id)
+	err = zipUSDZ(dir, id, texturePaths, unalignedUSDZPath)
+	if err != nil {
+		return "", err
+	}
+	if !withUSDC {
+		defer os.Remove(strings.Replace(usdaPath, "usda", "usdc", -1))
+	}
 
 	err = alignUSDZ(unalignedUSDZPath, alignedUSDZPath)
 	if err != nil {

@@ -55,7 +55,7 @@ func GetAsset(w http.ResponseWriter, r *http.Request) {
 		processTextures(assetDefinition)
 	}
 
-	path := processGeometry(assetDefinition, (format == "stl"), (format == "dae"), (format == "usd"))
+	path := processGeometry(assetDefinition, (format == "stl"), (format == "dae"), format == "usda", format == "usdc", (format == "usdz"))
 	if path == "" {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("Something went wrong generating the model"))
