@@ -77,9 +77,20 @@ func processGeometry(geom *bungie.DestinyGeometry, output *processedOutput) erro
 		output.plateIndices = append(output.plateIndices, plateIndex)
 	}
 
-	processTexturePlate("diffuse", plateMap, output)
-	processTexturePlate("normal", plateMap, output)
-	processTexturePlate("gearstack", plateMap, output)
+	err := processTexturePlate("diffuse", plateMap, output)
+	if err != nil {
+		return err
+	}
+
+	err = processTexturePlate("normal", plateMap, output)
+	if err != nil {
+		return err
+	}
+
+	err = processTexturePlate("gearstack", plateMap, output)
+	if err != nil {
+		return err
+	}
 
 	glg.Infof("Position length : %d", len(output.positionVertices))
 	glg.Infof("Found plate indices : %+v", output.plateIndices)
@@ -92,6 +103,10 @@ func processTexturePlate(plateName string, texturePlateJSON map[string]gjson.Res
 	diffuseSet := texturePlateJSON["plate_set"].Get(plateName)
 	plateIndex := int(diffuseSet.Get("plate_index").Int())
 	plateSizeTemp := diffuseSet.Get("plate_size").Array()
+	if len(plateSizeTemp) < 2 {
+		return fmt.Errorf("plate size temp has less than two elements for %s plate: Expected 2, Found %d", plateName, len(plateSizeTemp))
+	}
+
 	plateSize := [2]int{int(plateSizeTemp[0].Int()), int(plateSizeTemp[1].Int())}
 
 	texturePlacements := diffuseSet.Get("texture_placements").Array()
