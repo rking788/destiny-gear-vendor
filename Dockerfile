@@ -6,7 +6,7 @@ COPY . .
 
 RUN go get ./cmd/...
 
-RUN cd cmd/gallery && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /bin/gallery && cp gallery.tpl.html screen.css /bin/
+RUN cd cmd/gallery && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /bin/gallery && cp gallery.tpl.html screen.css search.js /bin/
 RUN cd cmd/server && make linux
 RUN cd cmd/texplode && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /bin/texplode
 

@@ -101,20 +101,20 @@ func copyFile(name, inPath string) {
 	path := path.Join(inPath, name)
 	src, err := os.Open(name)
 	if err != nil {
-		glg.Errorf("Error copying %s to destination: \n", name, err.Error())
+		glg.Errorf("Error copying %s to destination: %s\n", name, err.Error())
 		return
 	}
 	defer src.Close()
 
 	dst, err := os.Create(path)
 	if err != nil {
-		glg.Errorf("Error opening destination file for %s: \n", name, err.Error())
+		glg.Errorf("Error opening destination file for %s: %s\n", name, err.Error())
 		return
 	}
 
 	_, err = io.Copy(dst, src)
 	if err != nil {
-		glg.Errorf("Failed to copy input to output for %s: \n", name, err.Error())
+		glg.Errorf("Failed to copy input to output for %s: %s\n", name, err.Error())
 		return
 	}
 }
