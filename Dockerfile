@@ -19,6 +19,6 @@ RUN mkdir -p ./local_tools/geom/geometry ./local_tools/geom/textures ./output/  
 
 ENV PATH=$PATH:/usr/local/USD/bin/:/root/android-tools/27.0.3/
 
-COPY --from=0 /bin/gallery /bin/gallery.tpl.html /bin/screen.css /bin/server /bin/texplode /root/
+COPY --from=0 /bin/gallery /bin/gallery.tpl.html /bin/screen.css /bin/search.js /bin/server /bin/texplode /root/
 
 CMD ["./server"]
