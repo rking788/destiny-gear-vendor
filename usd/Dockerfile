@@ -12,7 +12,7 @@ RUN sh build-usd-with-cleanup.sh
 
 FROM fedora
 
-RUN dnf -y install python 
+RUN dnf -y install python zip
 
 WORKDIR /root/
 
