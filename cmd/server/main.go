@@ -407,7 +407,53 @@ func zipUSDZ(dir string, id uint, texturePaths []string, outPath string) error {
 	return nil
 }
 
+// TODO: For some reason this is not working. There is a difference between the zip
+// executabin Fedora and this archive generated here. The textures never show up
+// for some reason i'm not sure if it is the CRC-32 fields or the extra fields
+// but something is just wrong
+
+// func zipUSDZArchiver(dir string, id uint, texturePaths []string, outPath string) error {
+
+// 	z := archiver.Zip{
+// 		CompressionLevel: flate.NoCompression,
+// 		FileMethod:       archiver.Store,
+// 		MkdirAll:         false,
+// 	}
+
+// 	usdc := fmt.Sprintf("%s/%d.usdc", dir, id)
+// 	included := []string{usdc}
+// 	included = append(included, texturePaths...)
+
+// 	return z.Archive(included, outPath)
+// }
+
+func zipUSDZExec(dir string, id uint, texturePaths []string, outPath string) error {
+	glg.Infof("Zipping files to location: %s", outPath)
+
+	usdc := fmt.Sprintf("%s/%d.usdc", dir, id)
+	included := append([]string(nil), usdc)
+	included = append(included, texturePaths...)
+
+	var err error
+	for i, path := range included {
+
+		if i == 0 {
+			err = exec.Command("zip", "-0", "-q", outPath, path).Run()
+		} else {
+			err = exec.Command("zip", "-0", "-q", "-u", outPath, path).Run()
+		}
+
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 func alignUSDZ(unalignedUSDZPath, alignedUSDZPath string) error {
+
+	glg.Infof("Zipaligning to destination: %s", alignedUSDZPath)
 
 	err := exec.Command("zipalign", "-f", "64", unalignedUSDZPath, alignedUSDZPath).Run()
 
@@ -446,9 +492,11 @@ func createUSDZ(dir string, id uint, withUSDA, withUSDC, withUSDZ bool) (string,
 		}(texturePaths)
 	}
 
-	unalignedUSDZPath := fmt.Sprintf("%s/%d-unaligned.usdz", dir, id)
+	unalignedUSDZPath := fmt.Sprintf("%s/%d-unaligned.zip", dir, id)
 	alignedUSDZPath := fmt.Sprintf("%s/%d.usdz", dir, id)
-	err = zipUSDZ(dir, id, texturePaths, unalignedUSDZPath)
+	//err = zipUSDZ(dir, id, texturePaths, unalignedUSDZPath)
+	//err = zipUSDZArchiver(dir, id, texturePaths, unalignedUSDZPath)
+	err = zipUSDZExec(dir, id, texturePaths, unalignedUSDZPath)
 	if err != nil {
 		return "", err
 	}
